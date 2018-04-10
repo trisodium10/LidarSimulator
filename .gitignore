@@ -1,0 +1,10 @@
+*.py~
+*.pyc
+*.nc
+*.png
+*.json~
+*.gitignore~
+*.DS_Store
+*.nocommit
+description~
+
