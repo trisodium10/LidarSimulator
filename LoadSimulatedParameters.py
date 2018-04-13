@@ -22,13 +22,20 @@ import datetime
 
 o2_spec_file = '/Users/mhayman/Documents/DIAL/O2_HITRAN2012_760_781.txt'
 
-ncfile = 'simulated_thermodynamic_DIAL_20180331_T1256_sim.nc'
+#ncfile = 'simulated_thermodynamic_DIAL_20180331_T1256_sim.nc'
+#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1125_sim.nc'
+#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1144_sim.nc'
+#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1231_sim.nc'
+#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1254_sim.nc'
+#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1305_sim.nc'
+ncfile = 'simulated_thermodynamic_DIAL_20180411_T1328_sim.nc'
 
 load_sim_list = ['sim_T','sim_P','sim_range','sim_nu','Tetalon_O2_Online', 
     'Tetalon_O2_Offline','sim_nWV','BSR_HSRL_Molecular','Taer_HSRL_Molecular',
     'Overlap','sim_beta_mol','RbFilter','Tetalon_HSRL_Molecular',
     'Tetalon_WV_Online','Tetalon_WV_Offline','sim_nO2','sim_dr',
-    'T_tx_O2_Online','T_rx_aer_O2_Online','T_rx_mol_O2_Online']
+    'T_tx_O2_Online','T_rx_aer_O2_Online','T_rx_mol_O2_Online',
+    'WV_Online_laser_spectrum']
     
 sim_vars = lp.load_nc_vars(ncfile,load_sim_list)
 
@@ -39,8 +46,22 @@ for var in interp_list:
     interp_vars[var] = np.interp(fit_profs['BSR'].range_array,sim_vars['sim_range'],sim_vars[var])
     
 #TAct = np.interp(fit_profs['BSR'].range_array,sim_vars['sim_range'],sim_vars['sim_T'])
-#nWVAct = np.interp(fit_profs['BSR'].range_array,sim_vars['sim_range'],sim_vars['sim_nWV'])
+nWVAct = np.interp(fit_profs['BSR'].range_array,sim_vars['sim_range'],sim_vars['sim_nWV'])
 #BSRAct = np.interp(fit_profs['BSR'].range_array,sim_vars['sim_range'],sim_vars['BSR_HSRL_Molecular'])
+
+
+plt.figure()
+plt.plot(sim_vars['sim_nWV'],sim_vars['sim_range'],'k--')
+plt.plot(nWV.profile.flatten(),nWV.range_array,color='r')
+plt.xlabel('Water Vapor number density [$m^{-3}$]')
+plt.ylabel('Altitude [m]')
+plt.grid(b=True)
+
+plt.figure()
+plt.plot(1e-6*sim_vars['sim_nu'],10*np.log10(sim_vars['WV_Online_laser_spectrum']/sim_vars['WV_Online_laser_spectrum'].max()))
+plt.ylim([-60,0])
+plt.grid(b=True)
+plt.xlabel('Frequency [MHz]')
 
 
 
@@ -201,3 +222,4 @@ plt.semilogx(Trx[ch_name][inuL['O2 Online']]*np.exp(-ODs[inuL['O2 Online'],:]),f
 plt.figure()
 plt.semilogx(sim_vars['T_rx_mol_O2_Online'],sim_vars['sim_range'])
 plt.semilogx(np.sum(Trx[ch_name][:,np.newaxis]*np.exp(-ODs)*molPCA,axis=0),fit_profs['BSR'].range_array,'--')
+"""

@@ -23,7 +23,13 @@ import datetime
 
 
 #ncfile = 'simulated_thermodynamic_DIAL_20180331_T1256_data.nc'  # no shot noise
-ncfile = 'simulated_thermodynamic_DIAL_20180403_T1201_data.nc'  # shot noise
+#ncfile = 'simulated_thermodynamic_DIAL_20180403_T1201_data.nc'  # shot noise
+#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1125_data.nc'  # 5 MHz lasers
+#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1144_data.nc'  # 50 MHz lasers
+#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1231_data.nc'  # 300 MHz lasers
+#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1254_data.nc'  # 300 MHz no shot noise
+#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1305_data.nc'  # 1 GHz no shot noise
+ncfile = 'simulated_thermodynamic_DIAL_20180411_T1328_data.nc'  # 1 GHz 20 MHz etalon shift
 
 load_profile_list = ['WV Offline','WV Online','HSRL Combined','HSRL Molecular','O2 Online','O2 Offline']
 load_var_list = ['T_WS','P_WS']
