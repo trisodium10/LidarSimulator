@@ -68,13 +68,14 @@ name_list = ['WV Online','WV Offline','O2 Online','O2 Offline']  # name correspo
 index_list = np.arange(len(wavelength_list))
 s_i = np.array([0,0,1,1])  # index into particular species definition
 
+species_name =  ['H2O','O2']
 species_mass_list = np.array([lp.mH2O,spec.mO2])
 spec_file = ['/Users/mhayman/Documents/DIAL/WV_HITRAN2012_815_841.txt','/Users/mhayman/Documents/DIAL/O2_HITRAN2012_760_781.txt']
 spec_range = [np.array([lp.c/828.5e-9,lp.c/828e-9]),np.array([lp.c/770e-9,lp.c/768e-9])]
 
 pca_files = ['PCA_Data_WV_Online_828203pm.npz','PCA_Data_WV_Offline_828303pm.npz','PCA_Data_O2_Online_769234pm.npz','PCA_Data_O2_Offline_769320pm.npz']
 
-sim_i = 2
+sim_i = 0
 #tH_exec = []
 #t_exec = []
 #n_exec = []
@@ -90,7 +91,8 @@ sim_nu_max = 3e9  # edge of simulated frequency space
 sim_nu = np.arange(-sim_nu_max,sim_nu_max,sim_dnu) # frequency array in Hz
 
 start_time = timeit.default_timer()
-ext_hitran = spec.ExtinctionFromHITRAN(lp.c/wavelength_list[sim_i]+sim_nu,Temp.flatten(),Pres.flatten(),(species_mass_list[s_i[sim_i]]*1e-3)/lp.N_A,nuLim=spec_range[s_i[sim_i]],freqnorm=True,filename=spec_file[s_i[sim_i]]).T
+#ext_hitran = spec.ExtinctionFromHITRAN(lp.c/wavelength_list[sim_i]+sim_nu,Temp.flatten(),Pres.flatten(),(species_mass_list[s_i[sim_i]]*1e-3)/lp.N_A,nuLim=spec_range[s_i[sim_i]],freqnorm=True,filename=spec_file[s_i[sim_i]]).T
+ext_hitran = spec.ExtinctionFromHITRAN(lp.c/wavelength_list[sim_i]+sim_nu,Temp.flatten(),Pres.flatten(),species_name[s_i[sim_i]],nuLim=spec_range[s_i[sim_i]],freqnorm=True).T
 elapsed = timeit.default_timer() - start_time
 
 spec_params = spec.load_spect_params(pca_file_path+pca_files[sim_i])
@@ -164,13 +166,14 @@ ext,dext = spec.calc_pca_spectrum_w_deriv(spec_params,Temp,Pres)
 ext_i,dext_i = spec.calc_pca_spectrum_w_deriv(spec_params_int,Temp,Pres)
 fun_ext = lambda x: spec.calc_pca_spectrum(spec_params,x,Pres)
 dextNum = td.Num_Jacob(fun_ext,Temp,step_size=1e-2)
-fun_ext_hi = lambda x: spec.ExtinctionFromHITRAN(lp.c/wavelength_list[sim_i]+spec_params_int['nu_pca'],x,Pres.flatten(),(species_mass_list[s_i[sim_i]]*1e-3)/lp.N_A,nuLim=spec_range[s_i[sim_i]],freqnorm=True,filename=spec_file[s_i[sim_i]]).T
+#fun_ext_hi = lambda x: spec.ExtinctionFromHITRAN(lp.c/wavelength_list[sim_i]+spec_params_int['nu_pca'],x,Pres.flatten(),(species_mass_list[s_i[sim_i]]*1e-3)/lp.N_A,nuLim=spec_range[s_i[sim_i]],freqnorm=True,filename=spec_file[s_i[sim_i]]).T
+fun_ext_hi = lambda x: spec.ExtinctionFromHITRAN(lp.c/wavelength_list[sim_i]+spec_params_int['nu_pca'],x,Pres.flatten(),species_name[s_i[sim_i]],nuLim=spec_range[s_i[sim_i]],freqnorm=True).T
 dext_hiNum = td.Num_Jacob(fun_ext_hi,Temp,step_size=1e-2)
 plt.figure(); 
-plt.semilogy(spec_params['nu_pca']*1e-9,dext,label='PCA, native grid'); 
-plt.semilogy(spec_params['nu_pca']*1e-9,dextNum,'--',label='Numerical PCA, native grid')
-plt.semilogy(spec_params_int['nu_pca']*1e-9,dext_i,'r:',label='PCA, custom grid'); 
-plt.semilogy(spec_params_int['nu_pca']*1e-9,dext_hiNum,'k:',label='Numemrical HITRAN')
+plt.plot(spec_params['nu_pca']*1e-9,dext,label='PCA, native grid'); 
+plt.plot(spec_params['nu_pca']*1e-9,dextNum,'--',label='Numerical PCA, native grid')
+plt.plot(spec_params_int['nu_pca']*1e-9,dext_i,'r:',label='PCA, custom grid'); 
+plt.plot(spec_params_int['nu_pca']*1e-9,dext_hiNum,'k:',label='Numemrical HITRAN')
 plt.legend()
 
 dTP = TP_deriv(spec_params_int,Temp,Pres)

@@ -12,7 +12,7 @@ import numpy as np
 import LidarProfileFunctions as lp
 import WVProfileFunctions as wv
 import FourierOpticsLib as FO
-import SpectrumLib as rb
+import SpectrumLib as spec
 
 import TDRetrievalLib as td
 
@@ -26,23 +26,24 @@ import timeit
 save_data_path = '/Users/mhayman/Documents/DIAL/PCA_Spectroscopy/'
 save_figure_path = '/Users/mhayman/Documents/DIAL/PCA_Spectroscopy/output_plots/'
 
-wavelength_list = np.array([828.203e-9,828.3026e-9,769.2339e-9,769.319768e-9])  # offline,online,Comb,Mol,online,offline
-name_list = ['WV Online','WV Offline','O2 Online','O2 Offline']  # name corresponding to each wavelength
+wavelength_list = np.array([828.203e-9,828.3026e-9,769.2339e-9,769.319768e-9,769.7963e-9,770.1081e-9])  # offline,online,Comb,Mol,online,offline
+name_list = ['WV Online','WV Offline','O2 Online','O2 Offline','O2 Online','O2 Offline']  # name corresponding to each wavelength
 index_list = np.arange(len(wavelength_list))
-s_i = np.array([0,0,1,1])  # index into particular species definition
+s_i = np.array([0,0,1,1,1,1])  # index into particular species definition
 
-species_mass_list = np.array([lp.mH2O,td.mO2])
-spec_file = ['/Users/mhayman/Documents/DIAL/WV_HITRAN2012_815_841.txt','/Users/mhayman/Documents/DIAL/O2_HITRAN2012_760_781.txt']
-spec_range = [np.array([lp.c/828.5e-9,lp.c/828e-9]),np.array([lp.c/770e-9,lp.c/768e-9])]
+species_name = ['H2O','O2']
+#species_mass_list = np.array([lp.mH2O,td.mO2])
+#spec_file = ['/Users/mhayman/Documents/DIAL/WV_HITRAN2012_815_841.txt','/Users/mhayman/Documents/DIAL/O2_HITRAN2012_760_781.txt']
+spec_range = [np.array([lp.c/830e-9,lp.c/826e-9]),np.array([lp.c/772e-9,lp.c/768e-9])]
 
-sim_i = 2
-save_results = False
+sim_i = 5
+save_results = True
 
 
 save_file_name = 'PCA_Data_'+name_list[sim_i].replace(' ','_') + '_%dpm'%(np.round(wavelength_list[sim_i]*1e12).astype(np.int))
 run_string = datetime.datetime.today().strftime('Run On %A, %B %d, %Y, %H:%m')
 
-Npca = 10  # number of principle components
+Npca = 12  # number of principle components
 PtDensity = 50  # number of P and T points to evaluate (total points = PtDensity^2)
 
 Npoly = 10
@@ -78,7 +79,8 @@ Tm,Pm = np.meshgrid(sim_T,sim_P)
 ext_o2 = np.zeros((sim_nu.size,sim_P.size*sim_T.size))
 
 start_time = timeit.default_timer()
-ext_o2 = rb.ExtinctionFromHITRAN(lp.c/wavelength_list[sim_i]+sim_nu,Tm.flatten(),Pm.flatten(),(species_mass_list[s_i[sim_i]]*1e-3)/lp.N_A,nuLim=spec_range[s_i[sim_i]],freqnorm=True,filename=spec_file[s_i[sim_i]]).T
+#ext_o2 = rb.ExtinctionFromHITRAN(lp.c/wavelength_list[sim_i]+sim_nu,Tm.flatten(),Pm.flatten(),(species_mass_list[s_i[sim_i]]*1e-3)/lp.N_A,nuLim=spec_range[s_i[sim_i]],freqnorm=True,filename=spec_file[s_i[sim_i]]).T
+ext_o2 = spec.ExtinctionFromHITRAN(lp.c/wavelength_list[sim_i]+sim_nu,Tm.flatten(),Pm.flatten(),species_name[s_i[sim_i]],nuLim=spec_range[s_i[sim_i]],freqnorm=True).T
 elapsed = timeit.default_timer() - start_time
 
 

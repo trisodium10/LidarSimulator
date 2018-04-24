@@ -33,7 +33,8 @@ use_shot_noise = True # simulate shot noise
 
 Nprofiles = 2*30  # number of two second profiles
 
-wavelength_list = [828.3026e-9,828.203e-9,780.246119e-9,780.246119e-9,769.2339e-9,769.319768e-9]  # offline,online,Comb,Mol,online,offline  # O2 On center: 769.2339e-9
+#wavelength_list = [828.3026e-9,828.203e-9,780.246119e-9,780.246119e-9,769.2339e-9,769.319768e-9]  # offline,online,Comb,Mol,online,offline  # O2 On center: 769.2339e-9
+wavelength_list = [828.3026e-9,828.203e-9,780.246119e-9,780.246119e-9,769.7963e-9,770.1081e-9]  # offline,online,Comb,Mol,online,offline  # O2 On center: 769.7963
 K_list = Nprofiles*np.array([0.5e16,0.5e16,1.27e16*0.3,1.15e16*0.7,0.5e16,0.5e16])  # list of multiplier constants
 bg_list = Nprofiles*np.array([1.0,1.0,0.64,0.29,1.0,1.0])*5.7  # list of background levels (6 night, 150 peak day clear, 700-1000 day cloudy)
 name_list = ['WV Offline','WV Online','HSRL Combined','HSRL Molecular','O2 Online','O2 Offline']  # name corresponding to each wavelength
@@ -256,15 +257,19 @@ RbFilter = np.exp(-Lcell*(np.sum(K87,axis=0)*0.97/0.27832+np.sum(K85,axis=0)*0.0
 
 save_list.extend([{'var':RbFilter,'varname':'RbFilter','units':'','description':'simulated rubidium filter transmission'}])
 
+#spec.ExtinctionFromHITRAN(nu,TempProf,PresProf,mol,freqnorm=False,nuLim=np.array([]))
 # Oxygen Spectroscopy
-ext_o2 = spec.ExtinctionFromHITRAN(np.arange(-50e9,50e9,10e6)+lp.c/wavelength_list[4],sim_T[0:1],sim_P[0:1],(td.mO2*1e-3)/lp.N_A,nuLim=np.array([lp.c/770e-9,lp.c/768e-9]),freqnorm=True,filename=o2_spec_file).T
+#ext_o2 = spec.ExtinctionFromHITRAN(np.arange(-50e9,50e9,10e6)+lp.c/wavelength_list[4],sim_T[0:1],sim_P[0:1],(td.mO2*1e-3)/lp.N_A,nuLim=np.array([lp.c/770e-9,lp.c/768e-9]),freqnorm=True,filename=o2_spec_file).T
+ext_o2 = spec.ExtinctionFromHITRAN(np.arange(-50e9,50e9,10e6)+lp.c/wavelength_list[4],sim_T[0:1],sim_P[0:1],'O2',nuLim=np.array([lp.c/770e-9,lp.c/768e-9]),freqnorm=True).T
+ext_o2off = spec.ExtinctionFromHITRAN(np.arange(-50e9,50e9,10e6)+lp.c/wavelength_list[5],sim_T[0:1],sim_P[0:1],'O2',nuLim=np.array([lp.c/770e-9,lp.c/768e-9]),freqnorm=True).T
 Tetalon = O2_Filter.spectrum(np.arange(-50e9,50e9,10e6)+lp.c/wavelength_list[4],InWavelength=False,aoi=Etalon_angle,transmit=True)
 plt.figure(); 
 plt.plot(1e9*lp.c/(sim_nu+lp.c/wavelength_list[4]),laser_spec[name_list[4]]/laser_spec[name_list[4]].max(),label=name_list[4]+' Laser')
 plt.plot(1e9*lp.c/(sim_nu+lp.c/wavelength_list[5]),laser_spec[name_list[5]]/laser_spec[name_list[5]].max(),label=name_list[4]+' Laser')
 #plt.stem(1e9*np.array([wavelength_list[4],wavelength_list[5]]),np.ones(2),label='Laser')
 plt.plot(1e9*lp.c/(np.arange(-50e9,50e9,10e6)+lp.c/wavelength_list[4]),Tetalon,label='Etalon'); 
-plt.plot(1e9*lp.c/(np.arange(-50e9,50e9,10e6)+lp.c/wavelength_list[4]),ext_o2[:,0]/np.max(ext_o2[:,0]),label='Oxygen'); 
+plt.plot(1e9*lp.c/(np.arange(-50e9,50e9,10e6)+lp.c/wavelength_list[4]),ext_o2[:,0]/np.max(ext_o2[:,0]),label='Oxygen On'); 
+plt.plot(1e9*lp.c/(np.arange(-50e9,50e9,10e6)+lp.c/wavelength_list[5]),ext_o2off[:,0]/np.max(ext_o2[:,0]),label='Oxygen Off'); 
 plt.grid(b=True); 
 plt.xlabel('Wavelength [nm]'); 
 plt.ylabel('Transmission [A.U.]');
@@ -317,7 +322,8 @@ for ilist in range(len(wavelength_list)):
         Tetalon = Filter.spectrum(sim_nu+lp.c/wavelength_list[ilist],InWavelength=False,aoi=Etalons['WV']['angle'],transmit=True)+Etalons['WV']['min transmission']        
         
         # obtain frequency resolved water vapor extinction coefficient
-        ext_wv = lp.WV_ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,nuLim=np.array([lp.c/828.5e-9,lp.c/828e-9]),freqnorm=True).T
+#        ext_wv = lp.WV_ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,nuLim=np.array([lp.c/828.5e-9,lp.c/828e-9]),freqnorm=True).T
+        ext_wv = spec.ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,'H2O',freqnorm=True,nuLim=np.array([lp.c/828.5e-9,lp.c/828e-9])).T
             
         
         OD_wv = np.cumsum(sim_nWV[np.newaxis,:]*ext_wv,axis=1)*sim_dr  # obtain frequency resolved optical depth
@@ -346,7 +352,8 @@ for ilist in range(len(wavelength_list)):
         Tetalon = O2_Filter.spectrum(sim_nu+lp.c/wavelength_list[ilist],InWavelength=False,aoi=Etalons['O2']['angle'],transmit=True)+Etalons['O2']['min transmission']         
         
 #        ext_o2 = lp.WV_ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,nuLim=np.array([lp.c/770e-9,lp.c/768e-9]),freqnorm=True,filename=o2_spec_file).T
-        ext_o2 = spec.ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,(td.mO2*1e-3)/lp.N_A,nuLim=np.array([lp.c/770e-9,lp.c/768e-9]),freqnorm=True,filename=o2_spec_file).T
+#        ext_o2 = spec.ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,(td.mO2*1e-3)/lp.N_A,nuLim=np.array([lp.c/770e-9,lp.c/768e-9]),freqnorm=True,filename=o2_spec_file).T
+        ext_o2 = spec.ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,'O2',nuLim=np.array([lp.c/770e-9,lp.c/768e-9]),freqnorm=True).T
         
         OD_o2 = np.cumsum(sim_nO2[np.newaxis,:]*ext_o2,axis=1)*sim_dr
         if laser_BW_d[name_list[ilist]] == 0 or not use_RD:
