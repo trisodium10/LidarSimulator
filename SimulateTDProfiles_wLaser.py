@@ -29,7 +29,7 @@ print('   '+ncdatafilename)
 print('   '+ncsimfilename)
 
 use_RD = True  # simulate Rayleigh-Doppler Effect
-use_shot_noise = True # simulate shot noise
+use_shot_noise = False # simulate shot noise
 
 Nprofiles = 2*30  # number of two second profiles
 
@@ -39,7 +39,7 @@ K_list = Nprofiles*np.array([0.5e16,0.5e16,1.27e16*0.3,1.15e16*0.7,0.5e16,0.5e16
 bg_list = Nprofiles*np.array([1.0,1.0,0.64,0.29,1.0,1.0])*5.7  # list of background levels (6 night, 150 peak day clear, 700-1000 day cloudy)
 name_list = ['WV Offline','WV Online','HSRL Combined','HSRL Molecular','O2 Online','O2 Offline']  # name corresponding to each wavelength
 
-laser_BW_list = [1000e6]*len(wavelength_list)  # laser bandwidth
+laser_BW_list = [1e6]*len(wavelength_list)  # laser bandwidth
 
 Etalons = {'WV':{'center wavelength':wavelength_list[1],
                  'detune':-250e6,  # center frequency detuning in Hz
@@ -73,7 +73,16 @@ Etalons = {'WV':{'center wavelength':wavelength_list[1],
                  'angle':0.0,  # angle of incidence in radians
                  'min transmission':1e-2}],  # minimum transmission (best blocking)
             }
-                 
+# Defines the cross talk coefficients between the different channels  
+# This is mostly for laser cross talk into the amplifier.  Receiver cross talk
+# (e.g. HSRL channels) is mostly handled through the spectrum integration               
+CrossTalk = {'WV Online':{'WV Offline':1e-3},
+             'WV Offline':{'WV Online':1e-3},
+             'O2 Online':{'O2 Offline':1e-3},
+             'O2 Offline':{'O2 Online':1e-3},
+             'HSRL Molecular':{},
+             'HSRL Combined':{}
+            }
 
 wavelen_d = dict(zip(name_list,wavelength_list))
 K_d = dict(zip(name_list,K_list))
@@ -290,7 +299,7 @@ sim_beta_mol = 5.45*(550.0e-9/wavelength_list[2])**4*1e-32*(sim_P/9.86923e-6)/(s
 save_list.extend([{'var':sim_beta_mol,'varname':'sim_beta_mol','units':'m^-1 sr^-1','description':'simulated molecular backscatter coefficient at %f nm'%(wavelength_list[2]*1e9)}])
 
 
-
+BSprof = {}
 #ilist = 0
 for ilist in range(len(wavelength_list)):
 
@@ -421,12 +430,23 @@ for ilist in range(len(wavelength_list)):
     
     # Add constant multipliers
     BS_Sig = BS_Sig*K_list[ilist]*sim_dr/37.5
+        
+    
+#    # pulse convolution    
+    BS_Sig = np.convolve(BS_Sig,sim_pulse,mode='same')
+    
+    BSprof[name_list[ilist]] = BS_Sig.copy()
+    
+for ilist in range(len(wavelength_list)):
+    # cross talk    
+    BS_Sig = BSprof[name_list[ilist]].copy()
+    for ch in CrossTalk[name_list[ilist]].keys():
+        BS_Sig = BSprof[ch]*CrossTalk[name_list[ilist]][ch]+BS_Sig
     
     #Add background
     BS_Sig = BS_Sig+bg_list[ilist]*sim_dr/37.5
     
-#    # pulse convolution    
-    BG_Sig = np.convolve(BS_Sig,sim_pulse,mode='same')
+    
     
     # resample at lidar range resolution
     BS_Sig = np.convolve(BS_Sig,bin_func,mode='same')

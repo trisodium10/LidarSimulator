@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import scipy.optimize
 #from scipy.io import netcdf
 import LidarProfileFunctions as lp
+import LidarPlotFunctions as lplt
 import WVProfileFunctions as wv
 import FourierOpticsLib as FO
 import SpectrumLib as spec
@@ -20,7 +21,7 @@ import datetime
 
 #import netCDF4 as nc4
 
-o2_spec_file = '/Users/mhayman/Documents/DIAL/O2_HITRAN2012_760_781.txt'
+#o2_spec_file = '/Users/mhayman/Documents/DIAL/O2_HITRAN2012_760_781.txt'
 
 #ncfile = 'simulated_thermodynamic_DIAL_20180331_T1256_sim.nc'
 #ncfile = 'simulated_thermodynamic_DIAL_20180411_T1125_sim.nc'
@@ -37,7 +38,10 @@ o2_spec_file = '/Users/mhayman/Documents/DIAL/O2_HITRAN2012_760_781.txt'
 #ncfile = 'simulated_thermodynamic_DIAL_20180411_T1358_'  # 1 GHz HWHM Laser Spectrum, no shot noise 5% out of band blocking
 #ncfile = 'simulated_thermodynamic_DIAL_20180411_T1404_'  # 1 GHz HWHM Laser Spectrum, no shot noise 1% out of band blocking, 100 MHz etalon shift
 #ncfile = 'simulated_thermodynamic_DIAL_20180411_T1407_'  # 1 GHz HWHM Laser Spectrum, no shot noise 1% out of band blocking, 100 MHz etalon shift
-ncfile = 'simulated_thermodynamic_DIAL_20180412_T1344_'  # 1 GHz HWHM Laser Spectrum, with shot noise 1% out of band blocking, 100 MHz etalon shift
+#ncfile = 'simulated_thermodynamic_DIAL_20180412_T1344_'  # 1 GHz HWHM Laser Spectrum, with shot noise 1% out of band blocking, 100 MHz etalon shift
+#ncfile = 'simulated_thermodynamic_DIAL_20180426_T1222_'  # narrow laser, no shot noise, added 1e-4 DIAL cross talk
+ncfile = 'simulated_thermodynamic_DIAL_20180426_T1255_'  # narrow laser, no shot noise, added 1e-3 DIAL cross talk
+#ncfile = 'simulated_thermodynamic_DIAL_20180426_T1238_'  # narrow laser, no shot noise, added 1e-2 DIAL cross talk
 
 
 load_sim_list = ['sim_T','sim_P','sim_range','sim_nu','Tetalon_O2_Online', 

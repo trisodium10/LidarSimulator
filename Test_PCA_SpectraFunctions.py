@@ -75,7 +75,7 @@ spec_range = [np.array([lp.c/828.5e-9,lp.c/828e-9]),np.array([lp.c/770e-9,lp.c/7
 
 pca_files = ['PCA_Data_WV_Online_828203pm.npz','PCA_Data_WV_Offline_828303pm.npz','PCA_Data_O2_Online_769234pm.npz','PCA_Data_O2_Offline_769320pm.npz']
 
-sim_i = 0
+sim_i = 2
 #tH_exec = []
 #t_exec = []
 #n_exec = []
@@ -95,8 +95,11 @@ start_time = timeit.default_timer()
 ext_hitran = spec.ExtinctionFromHITRAN(lp.c/wavelength_list[sim_i]+sim_nu,Temp.flatten(),Pres.flatten(),species_name[s_i[sim_i]],nuLim=spec_range[s_i[sim_i]],freqnorm=True).T
 elapsed = timeit.default_timer() - start_time
 
-spec_params = spec.load_spect_params(pca_file_path+pca_files[sim_i])
-spec_params_int = spec.load_spect_params(pca_file_path+pca_files[sim_i],nu=sim_nu)
+pca_file = spec.get_pca_filename('abs',wavelength=wavelength_list[sim_i],name=name_list[sim_i])
+spec_params = spec.load_spect_params(pca_file)
+spec_params_int = spec.load_spect_params(pca_file,nu=sim_nu)
+#spec_params = spec.load_spect_params(pca_file_path+pca_files[sim_i])
+#spec_params_int = spec.load_spect_params(pca_file_path+pca_files[sim_i],nu=sim_nu)
 
 start_time = timeit.default_timer()
 #ext_pca = td.calc_pca_spectrum(spec_params,Temp,Pres,nu=sim_nu)

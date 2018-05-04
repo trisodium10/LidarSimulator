@@ -34,8 +34,8 @@ import timeit
 save_data_path = '/Users/mhayman/Documents/DIAL/PCA_Rayleigh/'
 save_figure_path = '/Users/mhayman/Documents/DIAL/PCA_Rayleigh/output_plots/'
 
-wavelength_list = np.array([828.203e-9,828.3026e-9,769.2339e-9,769.319768e-9,780.24e-9])  # offline,online,Comb,Mol,online,offline
-name_list = ['WV Online','WV Offline','O2 Online','O2 Offline','HSRL']  # name corresponding to each wavelength
+wavelength_list = np.array([828.203e-9,828.3026e-9,769.2339e-9,769.319768e-9,780.24e-9,769.7963e-9,770.1081e-9])  # offline,online,Comb,Mol,online,offline
+name_list = ['WV Online','WV Offline','O2 Online','O2 Offline','HSRL','O2 Online','O2 Offline']  # name corresponding to each wavelength
 index_list = np.arange(len(wavelength_list))
 #s_i = np.array([0,0,1,1])  # index into particular species definition
 
@@ -44,11 +44,13 @@ spec_file = ['/Users/mhayman/Documents/MATLAB/RBScatteringPCA/RB_Spectra_828203p
     '/Users/mhayman/Documents/MATLAB/RBScatteringPCA/RB_Spectra_828303pm.mat',\
     '/Users/mhayman/Documents/MATLAB/RBScatteringPCA/RB_Spectra_769234pm.mat',\
     '/Users/mhayman/Documents/MATLAB/RBScatteringPCA/RB_Spectra_769320pm.mat',\
-    '/Users/mhayman/Documents/MATLAB/RBScatteringPCA/RB_Spectra_780240pm.mat']
+    '/Users/mhayman/Documents/MATLAB/RBScatteringPCA/RB_Spectra_780240pm.mat',\
+    '/Users/mhayman/Documents/MATLAB/RBScatteringPCA/RB_Spectra_769796pm.mat',\
+    '/Users/mhayman/Documents/MATLAB/RBScatteringPCA/RB_Spectra_770108pm.mat']
 #spec_range = [np.array([lp.c/828.5e-9,lp.c/828e-9]),np.array([lp.c/770e-9,lp.c/768e-9])]
 
-sim_i = 0
-save_results = False
+sim_i = 6
+save_results = True
 
 
 save_file_name = 'RB_PCA_Data_'+name_list[sim_i].replace(' ','_') + '_%dpm'%(np.round(wavelength_list[sim_i]*1e12).astype(np.int))
