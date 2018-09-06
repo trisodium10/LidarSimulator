@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import scipy.optimize
 #from scipy.io import netcdf
 import LidarProfileFunctions as lp
+import LidarPlotFunctions as lplt
 import WVProfileFunctions as wv
 import FourierOpticsLib as FO
 import SpectrumLib as spec
@@ -31,7 +32,8 @@ print('   '+ncsimfilename)
 use_RD = True  # simulate Rayleigh-Doppler Effect
 use_shot_noise = True # simulate shot noise
 
-Nprofiles = 10*30  # number of two second profiles
+Nprofiles = 30  # number of two second profiles
+n_t_steps = 20  # number of time steps to capture
 
 #wavelength_list = [828.3026e-9,828.203e-9,780.246119e-9,780.246119e-9,769.2339e-9,769.319768e-9]  # offline,online,Comb,Mol,online,offline  # O2 On center: 769.2339e-9
 wavelength_list = [828.3026e-9,828.203e-9,780.246119e-9,780.246119e-9,769.7963e-9,770.1081e-9]  # offline,online,Comb,Mol,online,offline  # O2 On center: 769.7963
@@ -149,6 +151,9 @@ inu0 = np.argmin(np.abs(sim_nu)) # index to center of frequency array
 save_list.extend([{'var':sim_range,'varname':'sim_range','units':'m','description':'simulated range array'}])
 save_list.extend([{'var':sim_nu,'varname':'sim_nu','units':'Hz','description':'simulated relative frequency array'}])
 save_list.extend([{'var':inu0,'varname':'inu0','units':'','description':'index into zero frequency in sim_nu'}])
+
+
+pres,temp = ex.load_fixed_point_NCEP_TandP(OffLine,lidar_location,external_data_path)
 
 # define laser spectrum
 laser_spec = {}
@@ -299,169 +304,175 @@ plt.legend();
 sim_beta_mol = 5.45*(550.0e-9/wavelength_list[2])**4*1e-32*(sim_P/9.86923e-6)/(sim_T*lp.kB)
 save_list.extend([{'var':sim_beta_mol,'varname':'sim_beta_mol','units':'m^-1 sr^-1','description':'simulated molecular backscatter coefficient at %f nm'%(wavelength_list[2]*1e9)}])
 
-
-BSprof = {}
-#ilist = 0
-for ilist in range(len(wavelength_list)):
-
-    """
-    use convention [frequency,range] in 2D arrays
-    """
-    beta_mol = 5.45*(550.0e-9/wavelength_list[ilist])**4*1e-32*(sim_P/9.86923e-6)/(sim_T*lp.kB)
-    beta_aer = sim_beta_aer*wavelength_list[ilist]/780.24e-9
-    beta_cloud = sim_beta_cloud  #*wavelength_list[ilist]/780.24e-9  # No wavelength dependence in cloud
-    alpha_aer = beta_aer*sim_LR + beta_cloud*sim_cloud_LR
-    OD_aer = np.cumsum(alpha_aer)*sim_dr
-    OD_mol = np.cumsum(beta_mol*8*np.pi/3)*sim_dr
+for t_index in range(n_t_steps):
+    BSprof = {}
+    #ilist = 0
+    for ilist in range(len(wavelength_list)):
     
-    Taer = np.exp(-OD_aer-OD_mol)
-    
-    BSR = (beta_mol+beta_aer+beta_cloud)/beta_mol
-    save_list.extend([{'var':BSR,'varname':'BSR_'+name_list[ilist].replace(' ','_'),'units':'','description':'simulated backscatter ratio seen by the '+name_list[ilist]+' channel'}])
-    save_list.extend([{'var':Taer,'varname':'Taer_'+name_list[ilist].replace(' ','_'),'units':'','description':'simulated atmospheric aerosol/molecular transmission seen by the '+name_list[ilist]+' channel'}])
-    
-    
-    
-    # obtain the molecular backscatter spectrum
-    molBeta_nu = lp.RB_Spectrum(sim_T,sim_P,wavelength_list[ilist],nu=sim_nu,norm=True)
-    #plt.figure(); 
-    #plt.imshow(molBeta_nu);
-    
-    if 'WV' in name_list[ilist]:
-        # define etalon transmission
-        Tetalon = Filter.spectrum(sim_nu+lp.c/wavelength_list[ilist],InWavelength=False,aoi=Etalons['WV']['angle'],transmit=True)+Etalons['WV']['min transmission']        
+        """
+        use convention [frequency,range] in 2D arrays
+        """
+        beta_mol = 5.45*(550.0e-9/wavelength_list[ilist])**4*1e-32*(sim_P/9.86923e-6)/(sim_T*lp.kB)
+        beta_aer = sim_beta_aer*wavelength_list[ilist]/780.24e-9
+        beta_cloud = sim_beta_cloud  #*wavelength_list[ilist]/780.24e-9  # No wavelength dependence in cloud
+        alpha_aer = beta_aer*sim_LR + beta_cloud*sim_cloud_LR
+        OD_aer = np.cumsum(alpha_aer)*sim_dr
+        OD_mol = np.cumsum(beta_mol*8*np.pi/3)*sim_dr
         
-        # obtain frequency resolved water vapor extinction coefficient
-#        ext_wv = lp.WV_ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,nuLim=np.array([lp.c/828.5e-9,lp.c/828e-9]),freqnorm=True).T
-        ext_wv = spec.ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,'H2O',freqnorm=True,nuLim=np.array([lp.c/828.5e-9,lp.c/828e-9])).T
+        Taer = np.exp(-OD_aer-OD_mol)
+        
+        BSR = (beta_mol+beta_aer+beta_cloud)/beta_mol
+        save_list.extend([{'var':BSR,'varname':'BSR_'+name_list[ilist].replace(' ','_'),'units':'','description':'simulated backscatter ratio seen by the '+name_list[ilist]+' channel'}])
+        save_list.extend([{'var':Taer,'varname':'Taer_'+name_list[ilist].replace(' ','_'),'units':'','description':'simulated atmospheric aerosol/molecular transmission seen by the '+name_list[ilist]+' channel'}])
+        
+        
+        
+        # obtain the molecular backscatter spectrum
+        molBeta_nu = lp.RB_Spectrum(sim_T,sim_P,wavelength_list[ilist],nu=sim_nu,norm=True)
+        #plt.figure(); 
+        #plt.imshow(molBeta_nu);
+        
+        if 'WV' in name_list[ilist]:
+            # define etalon transmission
+            Tetalon = Filter.spectrum(sim_nu+lp.c/wavelength_list[ilist],InWavelength=False,aoi=Etalons['WV']['angle'],transmit=True)+Etalons['WV']['min transmission']        
             
-        
-        OD_wv = np.cumsum(sim_nWV[np.newaxis,:]*ext_wv,axis=1)*sim_dr  # obtain frequency resolved optical depth
-        
-        if laser_BW_d[name_list[ilist]] == 0 or not use_RD:
-            # Calculation for a narrow band laser
-            T_tx = np.exp(-OD_wv[inu0,:])  # outgoing atmospheric transmission
-            T_rx_aer = np.exp(-OD_wv[inu0,:])*Tetalon[inu0]  # return transmission for atmosphere and etalon seen by aerosols
-            if use_RD:
+            # obtain frequency resolved water vapor extinction coefficient
+    #        ext_wv = lp.WV_ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,nuLim=np.array([lp.c/828.5e-9,lp.c/828e-9]),freqnorm=True).T
+            ext_wv = spec.ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,'H2O',freqnorm=True,nuLim=np.array([lp.c/828.5e-9,lp.c/828e-9])).T
+                
+            
+            OD_wv = np.cumsum(sim_nWV[np.newaxis,:]*ext_wv,axis=1)*sim_dr  # obtain frequency resolved optical depth
+            
+            if laser_BW_d[name_list[ilist]] == 0 or not use_RD:
+                # Calculation for a narrow band laser
+                T_tx = np.exp(-OD_wv[inu0,:])  # outgoing atmospheric transmission
+                T_rx_aer = np.exp(-OD_wv[inu0,:])*Tetalon[inu0]  # return transmission for atmosphere and etalon seen by aerosols
+                if use_RD:
+                    T_rx_mol = np.sum(molBeta_nu*Tetalon[:,np.newaxis]*np.exp(-OD_wv),axis=0)          
+                else:
+                    T_rx_mol = np.exp(-OD_wv[inu0,:])*Tetalon[inu0] 
+            else:
+                # calculation for a finite bandwidth laser
+                for irange in range(molBeta_nu.shape[1]):
+                    # convolve the molecular and laser spectrums to get the true return spectrum
+                    molBeta_nu[:,irange] = np.convolve(molBeta_nu[:,irange],laser_spec[name_list[ilist]],'same')
+                    molBeta_nu[:,irange] = molBeta_nu[:,irange]/np.sum(molBeta_nu[:,irange])  # make sure the result is still normalized
+                    
+                T_tx = np.sum(np.exp(-OD_wv)*laser_spec[name_list[ilist]][:,np.newaxis],axis=0)  # outgoing atmospheric transmission
+                T_rx_aer = np.sum(np.exp(-OD_wv)*(Tetalon*laser_spec[name_list[ilist]])[:,np.newaxis],axis=0)  # return transmission for atmosphere and etalon seen by aerosols
                 T_rx_mol = np.sum(molBeta_nu*Tetalon[:,np.newaxis]*np.exp(-OD_wv),axis=0)          
-            else:
-                T_rx_mol = np.exp(-OD_wv[inu0,:])*Tetalon[inu0] 
-        else:
-            # calculation for a finite bandwidth laser
-            for irange in range(molBeta_nu.shape[1]):
-                # convolve the molecular and laser spectrums to get the true return spectrum
-                molBeta_nu[:,irange] = np.convolve(molBeta_nu[:,irange],laser_spec[name_list[ilist]],'same')
-                molBeta_nu[:,irange] = molBeta_nu[:,irange]/np.sum(molBeta_nu[:,irange])  # make sure the result is still normalized
+                    
+        elif 'O2' in name_list[ilist]:
+            # define etalon transmission
+            Tetalon = O2_Filter.spectrum(sim_nu+lp.c/wavelength_list[ilist],InWavelength=False,aoi=Etalons['O2']['angle'],transmit=True)+Etalons['O2']['min transmission']         
+            
+    #        ext_o2 = lp.WV_ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,nuLim=np.array([lp.c/770e-9,lp.c/768e-9]),freqnorm=True,filename=o2_spec_file).T
+    #        ext_o2 = spec.ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,(td.mO2*1e-3)/lp.N_A,nuLim=np.array([lp.c/770e-9,lp.c/768e-9]),freqnorm=True,filename=o2_spec_file).T
+            ext_o2 = spec.ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,'O2',nuLim=np.array([lp.c/770e-9,lp.c/768e-9]),freqnorm=True).T
+            
+            OD_o2 = np.cumsum(sim_nO2[np.newaxis,:]*ext_o2,axis=1)*sim_dr
+            if laser_BW_d[name_list[ilist]] == 0 or not use_RD:
+                # Calculation for a narrow band laser
+                T_tx = np.exp(-OD_o2[inu0,:])
+                T_rx_aer = np.exp(-OD_o2[inu0,:])*Tetalon[inu0]
+                if use_RD:
+                    T_rx_mol = np.sum(molBeta_nu*Tetalon[:,np.newaxis]*np.exp(-OD_o2),axis=0)
+                else:
+                    T_rx_mol = np.exp(-OD_o2[inu0,:])*Tetalon[inu0]
                 
-            T_tx = np.sum(np.exp(-OD_wv)*laser_spec[name_list[ilist]][:,np.newaxis],axis=0)  # outgoing atmospheric transmission
-            T_rx_aer = np.sum(np.exp(-OD_wv)*(Tetalon*laser_spec[name_list[ilist]])[:,np.newaxis],axis=0)  # return transmission for atmosphere and etalon seen by aerosols
-            T_rx_mol = np.sum(molBeta_nu*Tetalon[:,np.newaxis]*np.exp(-OD_wv),axis=0)          
-                
-    elif 'O2' in name_list[ilist]:
-        # define etalon transmission
-        Tetalon = O2_Filter.spectrum(sim_nu+lp.c/wavelength_list[ilist],InWavelength=False,aoi=Etalons['O2']['angle'],transmit=True)+Etalons['O2']['min transmission']         
-        
-#        ext_o2 = lp.WV_ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,nuLim=np.array([lp.c/770e-9,lp.c/768e-9]),freqnorm=True,filename=o2_spec_file).T
-#        ext_o2 = spec.ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,(td.mO2*1e-3)/lp.N_A,nuLim=np.array([lp.c/770e-9,lp.c/768e-9]),freqnorm=True,filename=o2_spec_file).T
-        ext_o2 = spec.ExtinctionFromHITRAN(lp.c/wavelength_list[ilist]+sim_nu,sim_T,sim_P,'O2',nuLim=np.array([lp.c/770e-9,lp.c/768e-9]),freqnorm=True).T
-        
-        OD_o2 = np.cumsum(sim_nO2[np.newaxis,:]*ext_o2,axis=1)*sim_dr
-        if laser_BW_d[name_list[ilist]] == 0 or not use_RD:
-            # Calculation for a narrow band laser
-            T_tx = np.exp(-OD_o2[inu0,:])
-            T_rx_aer = np.exp(-OD_o2[inu0,:])*Tetalon[inu0]
-            if use_RD:
-                T_rx_mol = np.sum(molBeta_nu*Tetalon[:,np.newaxis]*np.exp(-OD_o2),axis=0)
             else:
-                T_rx_mol = np.exp(-OD_o2[inu0,:])*Tetalon[inu0]
+                # calculation for a finite bandwidth laser
+                for irange in range(molBeta_nu.shape[1]):
+                    # convolve the molecular and laser spectrums to get the true return spectrum
+                    molBeta_nu[:,irange] = np.convolve(molBeta_nu[:,irange],laser_spec[name_list[ilist]],'same')
+                    molBeta_nu[:,irange] = molBeta_nu[:,irange]/np.sum(molBeta_nu[:,irange])  # make sure the result is still normalized
+                    
+                T_tx = np.sum(np.exp(-OD_wv)*laser_spec[name_list[ilist]][:,np.newaxis],axis=0)  # outgoing atmospheric transmission
+                T_rx_aer = np.sum(np.exp(-OD_wv)*(Tetalon*laser_spec[name_list[ilist]])[:,np.newaxis],axis=0)  # return transmission for atmosphere and etalon seen by aerosols
+                T_rx_mol = np.sum(molBeta_nu*Tetalon[:,np.newaxis]*np.exp(-OD_wv),axis=0) 
             
         else:
+            Tetalon = (HSRL_Filter1.spectrum(sim_nu+lp.c/wavelength_list[2],InWavelength=False,aoi=Etalons['HSRL'][0]['angle'],transmit=True)+Etalons['HSRL'][0]['min transmission'])     \
+                *(HSRL_Filter2.spectrum(sim_nu+lp.c/wavelength_list[2],InWavelength=False,aoi=Etalons['HSRL'][1]['angle'],transmit=True)+Etalons['HSRL'][1]['min transmission'])
+            BSR_780 = BSR  # store for comparison to processing retrievals
+            if laser_BW_d[name_list[ilist]] == 0:
+                # calculation for narrow band laser
+                if 'Molecular' in name_list[ilist]:
+                    T_rx_mol = np.sum(molBeta_nu*Tetalon[:,np.newaxis]*RbFilter[:,np.newaxis],axis=0)
+                    T_rx_aer = Tetalon[inu0]*RbFilter[inu0]
+                    T_tx = 1.0
+                else:
+                    T_rx_mol = np.sum(molBeta_nu*Tetalon[:,np.newaxis],axis=0)
+                    T_rx_aer = Tetalon[inu0]
+                    T_tx = 1.0
+            else:
             # calculation for a finite bandwidth laser
-            for irange in range(molBeta_nu.shape[1]):
-                # convolve the molecular and laser spectrums to get the true return spectrum
-                molBeta_nu[:,irange] = np.convolve(molBeta_nu[:,irange],laser_spec[name_list[ilist]],'same')
-                molBeta_nu[:,irange] = molBeta_nu[:,irange]/np.sum(molBeta_nu[:,irange])  # make sure the result is still normalized
+                for irange in range(molBeta_nu.shape[1]):
+                    # convolve the molecular and laser spectrums to get the true return spectrum
+                    molBeta_nu[:,irange] = np.convolve(molBeta_nu[:,irange],laser_spec[name_list[ilist]],'same')
+                    molBeta_nu[:,irange] = molBeta_nu[:,irange]/np.sum(molBeta_nu[:,irange])  # make sure the result is still normalized
                 
-            T_tx = np.sum(np.exp(-OD_wv)*laser_spec[name_list[ilist]][:,np.newaxis],axis=0)  # outgoing atmospheric transmission
-            T_rx_aer = np.sum(np.exp(-OD_wv)*(Tetalon*laser_spec[name_list[ilist]])[:,np.newaxis],axis=0)  # return transmission for atmosphere and etalon seen by aerosols
-            T_rx_mol = np.sum(molBeta_nu*Tetalon[:,np.newaxis]*np.exp(-OD_wv),axis=0) 
-        
-    else:
-        Tetalon = (HSRL_Filter1.spectrum(sim_nu+lp.c/wavelength_list[2],InWavelength=False,aoi=Etalons['HSRL'][0]['angle'],transmit=True)+Etalons['HSRL'][0]['min transmission'])     \
-            *(HSRL_Filter2.spectrum(sim_nu+lp.c/wavelength_list[2],InWavelength=False,aoi=Etalons['HSRL'][1]['angle'],transmit=True)+Etalons['HSRL'][1]['min transmission'])
-        BSR_780 = BSR  # store for comparison to processing retrievals
-        if laser_BW_d[name_list[ilist]] == 0:
-            # calculation for narrow band laser
-            if 'Molecular' in name_list[ilist]:
-                T_rx_mol = np.sum(molBeta_nu*Tetalon[:,np.newaxis]*RbFilter[:,np.newaxis],axis=0)
-                T_rx_aer = Tetalon[inu0]*RbFilter[inu0]
-                T_tx = 1.0
-            else:
-                T_rx_mol = np.sum(molBeta_nu*Tetalon[:,np.newaxis],axis=0)
-                T_rx_aer = Tetalon[inu0]
-                T_tx = 1.0
-        else:
-        # calculation for a finite bandwidth laser
-            for irange in range(molBeta_nu.shape[1]):
-                # convolve the molecular and laser spectrums to get the true return spectrum
-                molBeta_nu[:,irange] = np.convolve(molBeta_nu[:,irange],laser_spec[name_list[ilist]],'same')
-                molBeta_nu[:,irange] = molBeta_nu[:,irange]/np.sum(molBeta_nu[:,irange])  # make sure the result is still normalized
+                if 'Molecular' in name_list[ilist]:
+                    T_rx_mol = np.sum(molBeta_nu*Tetalon[:,np.newaxis]*RbFilter[:,np.newaxis],axis=0)
+                    T_rx_aer = np.sum(Tetalon*RbFilter*laser_spec[name_list[ilist]])
+                    T_tx = 1.0
+                else:
+                    T_rx_mol = np.sum(molBeta_nu*Tetalon[:,np.newaxis],axis=0)
+                    T_rx_aer = np.sum(Tetalon*laser_spec[name_list[ilist]])
+                    T_tx = 1.0
             
-            if 'Molecular' in name_list[ilist]:
-                T_rx_mol = np.sum(molBeta_nu*Tetalon[:,np.newaxis]*RbFilter[:,np.newaxis],axis=0)
-                T_rx_aer = np.sum(Tetalon*RbFilter*laser_spec[name_list[ilist]])
-                T_tx = 1.0
-            else:
-                T_rx_mol = np.sum(molBeta_nu*Tetalon[:,np.newaxis],axis=0)
-                T_rx_aer = np.sum(Tetalon*laser_spec[name_list[ilist]])
-                T_tx = 1.0
+        save_list.extend([{'var':Tetalon,'varname':'Tetalon_'+name_list[ilist].replace(' ','_'),'units':'','description':'simulated transmission through the etalon in the '+name_list[ilist]+' channel'}])
+        save_list.extend([{'var':T_tx,'varname':'T_tx_'+name_list[ilist].replace(' ','_'),'units':'','description':'simulated outgoing transmission through the atmosphere in the '+name_list[ilist]+' channel'}])
+        save_list.extend([{'var':T_rx_aer,'varname':'T_rx_aer_'+name_list[ilist].replace(' ','_'),'units':'','description':'simulated return transmission from aerosol scattering through the atmosphere and receiver in the '+name_list[ilist]+' channel'}])
+        save_list.extend([{'var':T_rx_mol,'varname':'T_rx_mol_'+name_list[ilist].replace(' ','_'),'units':'','description':'simulated return transmission from molecular scattering through the atmosphere and receiver in the '+name_list[ilist]+' channel'}])
+    #    plt.figure()
+    #    plt.plot(T_wv_tx,sim_range)
+    #    plt.plot(T_wv_rx_mol,sim_range)
         
-    save_list.extend([{'var':Tetalon,'varname':'Tetalon_'+name_list[ilist].replace(' ','_'),'units':'','description':'simulated transmission through the etalon in the '+name_list[ilist]+' channel'}])
-    save_list.extend([{'var':T_tx,'varname':'T_tx_'+name_list[ilist].replace(' ','_'),'units':'','description':'simulated outgoing transmission through the atmosphere in the '+name_list[ilist]+' channel'}])
-    save_list.extend([{'var':T_rx_aer,'varname':'T_rx_aer_'+name_list[ilist].replace(' ','_'),'units':'','description':'simulated return transmission from aerosol scattering through the atmosphere and receiver in the '+name_list[ilist]+' channel'}])
-    save_list.extend([{'var':T_rx_mol,'varname':'T_rx_mol_'+name_list[ilist].replace(' ','_'),'units':'','description':'simulated return transmission from molecular scattering through the atmosphere and receiver in the '+name_list[ilist]+' channel'}])
-#    plt.figure()
-#    plt.plot(T_wv_tx,sim_range)
-#    plt.plot(T_wv_rx_mol,sim_range)
-    
-    
-    BS_Sig = Overlap*Taer**2*T_tx*(T_rx_mol*beta_mol+T_rx_aer*(beta_aer+beta_cloud))/sim_range**2
-    BS_Sig[np.nonzero(sim_range==0)] = 0
-    BS_Sig = BS_Sig+tx_scatter*Overlap[0]
-    
-    # Add constant multipliers
-    BS_Sig = BS_Sig*K_list[ilist]*sim_dr/37.5
         
+        BS_Sig = Overlap*Taer**2*T_tx*(T_rx_mol*beta_mol+T_rx_aer*(beta_aer+beta_cloud))/sim_range**2
+        BS_Sig[np.nonzero(sim_range==0)] = 0
+        BS_Sig = BS_Sig+tx_scatter*Overlap[0]
+        
+        # Add constant multipliers
+        BS_Sig = BS_Sig*K_list[ilist]*sim_dr/37.5
+            
+        
+    #    # pulse convolution    
+        BS_Sig = np.convolve(BS_Sig,sim_pulse,mode='same')
+        
+        BSprof[name_list[ilist]] = BS_Sig.copy()
+        
+    for ilist in range(len(wavelength_list)):
+        # cross talk    
+        BS_Sig = BSprof[name_list[ilist]].copy()
+        for ch in CrossTalk[name_list[ilist]].keys():
+            BS_Sig = BSprof[ch]*CrossTalk[name_list[ilist]][ch]+BS_Sig
+        
+        #Add background
+        BS_Sig = BS_Sig+bg_list[ilist]*sim_dr/37.5
+        
+        
+        
+        # resample at lidar range resolution
+        BS_Sig = np.convolve(BS_Sig,bin_func,mode='same')
+        BS_Sig = np.interp(sim_range_bin,sim_range,BS_Sig)
+        
+        # Nonlinearity?
     
-#    # pulse convolution    
-    BS_Sig = np.convolve(BS_Sig,sim_pulse,mode='same')
+        # Shot Noise 
+        if use_shot_noise:   
+            BS_Sig = np.random.poisson(lam=BS_Sig)
     
-    BSprof[name_list[ilist]] = BS_Sig.copy()
-    
-for ilist in range(len(wavelength_list)):
-    # cross talk    
-    BS_Sig = BSprof[name_list[ilist]].copy()
-    for ch in CrossTalk[name_list[ilist]].keys():
-        BS_Sig = BSprof[ch]*CrossTalk[name_list[ilist]][ch]+BS_Sig
-    
-    #Add background
-    BS_Sig = BS_Sig+bg_list[ilist]*sim_dr/37.5
-    
-    
-    
-    # resample at lidar range resolution
-    BS_Sig = np.convolve(BS_Sig,bin_func,mode='same')
-    BS_Sig = np.interp(sim_range_bin,sim_range,BS_Sig)
-    
-    # Nonlinearity?
+        Prof = lp.LidarProfile(BS_Sig[np.newaxis,:],np.array([0+t_index*2*Nprofiles]),label='Simulated '+name_list[ilist],lidar='WV-DIAL',binwidth=bin_res*2/lp.c,wavelength=wavelength_list[ilist],StartDate=datetime.datetime.today())
+        signal_list.extend([Prof]) 
+        
+        if name_list[ilist] in signal_list.keys():
+            signal_list[name_list[ilist]].cat_time(Prof,front=False)
+        else:
+            signal_list[name_list[ilist]] = Prof.copy()
+        
 
-    # Shot Noise 
-    if use_shot_noise:   
-        BS_Sig = np.random.poisson(lam=BS_Sig)
-
-    Prof = lp.LidarProfile(BS_Sig[np.newaxis,:],np.array([0]),label='Simulated '+name_list[ilist],lidar='WV-DIAL',binwidth=bin_res*2/lp.c,wavelength=wavelength_list[ilist],StartDate=datetime.datetime.today())
-    signal_list.extend([Prof])    
-    
 #    if ilist == 0:
 #        plt.figure()
 #    plt.semilogx(BS_Sig,sim_range)
@@ -477,11 +488,16 @@ save_data_list.extend([{'var':sim_T[0],'varname':'T_WS','units':'K','description
 for ai in range(len(save_data_list)):
     lp.write_var2nc(save_data_list[ai]['var'],save_data_list[ai]['varname'],ncdatafilename,units=save_data_list[ai]['units'],description = save_data_list[ai]['description'])
 
-for ai, signal in enumerate(signal_list):
+#for ai, signal in enumerate(signal_list):
+#    signal.write2nc(ncdatafilename,write_axes=True)
+
+for signal in save_list.keys():
     signal.write2nc(ncdatafilename,write_axes=True)
 
+lplt.plotprofiles(signal_list)
 
-lp.plotprofiles(signal_list)
+
+lplt.pcolor_profile([signal])
 
 
 

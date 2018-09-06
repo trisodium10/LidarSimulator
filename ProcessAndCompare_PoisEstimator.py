@@ -15,34 +15,24 @@ import WVProfileFunctions as wv
 import FourierOpticsLib as FO
 import SpectrumLib as spec
 
+import sys
+
+sys.path.append('/Users/mhayman/Documents/Python/Lidar')
+
+import RandomVarLib as rv
+
 import TDRetrieval3Lib as td # use the TD3 library that treats state variables as exponents (e.g. ln(T) = x)
 
 import datetime
 
 #import netCDF4 as nc4
 
-#o2_spec_file = '/Users/mhayman/Documents/DIAL/O2_HITRAN2012_760_781.txt'
 
-#ncfile = 'simulated_thermodynamic_DIAL_20180331_T1256_sim.nc'
-#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1125_sim.nc'
-#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1144_sim.nc'
-#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1231_sim.nc'
-#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1254_sim.nc'
-#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1305_sim.nc'
-#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1328_sim.nc'
-
-
-#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1347_'  # 1 GHz HWHM Laser Spectrum, no shot noise
-#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1350_'  # 6 GHz HWHM Laser Spectrum, no shot noise
-#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1357_'  # 6 GHz HWHM Laser Spectrum, no shot noise 5% out of band blocking
-#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1358_'  # 1 GHz HWHM Laser Spectrum, no shot noise 5% out of band blocking
-#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1404_'  # 1 GHz HWHM Laser Spectrum, no shot noise 1% out of band blocking, 100 MHz etalon shift
-#ncfile = 'simulated_thermodynamic_DIAL_20180411_T1407_'  # 1 GHz HWHM Laser Spectrum, no shot noise 1% out of band blocking, 100 MHz etalon shift
-#ncfile = 'simulated_thermodynamic_DIAL_20180412_T1344_'  # 1 GHz HWHM Laser Spectrum, with shot noise 1% out of band blocking, 100 MHz etalon shift
-ncfile = 'simulated_thermodynamic_DIAL_20180426_T1222_'  # narrow laser, no shot noise, added 1e-4 DIAL cross talk
-#ncfile = 'simulated_thermodynamic_DIAL_20180426_T1255_'  # narrow laser, no shot noise, added 1e-3 DIAL cross talk
-#ncfile = 'simulated_thermodynamic_DIAL_20180426_T1238_'  # narrow laser, no shot noise, added 1e-2 DIAL cross talk
-
+#ncfile = 'simulated_thermodynamic_DIAL_20180726_T0859_'  # 2 minute data with shot noise
+#ncfile = 'simulated_thermodynamic_DIAL_20180726_T1030_'  # 10 minute data with shot noise
+#ncfile = 'simulated_thermodynamic_DIAL_20180727_T1408_'  # 2 minute data with shot noise without cloud
+#ncfile = 'simulated_thermodynamic_DIAL_20180727_T1419_'  # 2 minute data with shot noise and elevated aerosol
+ncfile = 'simulated_thermodynamic_DIAL_20180727_T1430_'  # 10 minute data with shot noise and elevated aerosol
 
 load_sim_list = ['sim_T','sim_P','sim_range','sim_nu','Tetalon_O2_Online', 
     'Tetalon_O2_Offline','sim_nWV','BSR_HSRL_Molecular','Taer_HSRL_Molecular',
@@ -70,11 +60,31 @@ Process Data (Standard routines)
 
 lp.plotprofiles(profs)
 raw_profs = {}
+p_profs = {}
 for var in profs.keys():
     raw_profs[var] = profs[var].copy()
+    p_profs[var] = rv.load_array(profs[var].profile)
+    
     profs[var].bg_subtract(-50)
+    p_profs[var] = p_profs[var] - 1.0/50*np.sum(p_profs[var][:,-50:],axis=1)[:,np.newaxis]
+#    p_profs[var] = p_profs[var] - 1.0/50*rv.varsum(p_profs[:,-50:],axis=1)
 
 lp.plotprofiles(profs)
+
+pltvar = 'WV Offline'
+plt.figure()
+plt.fill_betweenx(profs[pltvar].range_array,
+                  profs[pltvar].profile[0,:]-np.sqrt(profs[pltvar].profile_variance[0,:]), \
+                  profs[pltvar].profile[0,:]+np.sqrt(profs[pltvar].profile_variance[0,:]), \
+                  color='r',alpha=0.2,label='First Order')
+plt.fill_betweenx(profs[pltvar].range_array, \
+                  rv.moment(p_profs[pltvar][0,:],num=1)-np.sqrt(rv.moment(p_profs[pltvar][0,:],num=2)), \
+                  rv.moment(p_profs[pltvar][0,:],num=1)+np.sqrt(rv.moment(p_profs[pltvar][0,:],num=2)),color='b',alpha=0.2,label='Third Order')
+plt.plot(profs[pltvar].profile[0,:],profs[pltvar].range_array,'b-')
+plt.plot(rv.moment(p_profs[pltvar][0,:],num=0),profs[pltvar].range_array,'r-')
+plt.grid(b=True)
+plt.xlabel('Signal Counts')
+plt.ylabel('Range [m]')
 
 beta_mol_sonde,temp,pres = lp.get_beta_m_model(profs['HSRL Molecular'],np.array([data_vars['T_WS']]),np.array([data_vars['P_WS']]),returnTP=True)
 #beta_mol_sonde,temp,pres = lp.get_beta_m_model(profs['HSRL Molecular'],data_vars['T_WS'],data_vars['P_WS'],returnTP=True)
@@ -195,11 +205,45 @@ nWV = wv.WaterVapor_2D(profs['WV Online'],profs['WV Offline'],lam_on,lam_off,pre
 nWV.gain_scale(lp.N_A/lp.mH2O)
 nWV.profile_type = '$m^{-3}$'
 
+# poisson variable based processing
+temp_i = np.interp(nWV.range_array,temp.range_array,temp.profile[0,:])
+pres_i = np.interp(nWV.range_array,pres.range_array,pres.profile[0,:])
+
+# load the PCA spectroscopy files and data          
+sig_on_fn = spec.get_pca_filename('Abs',name='WV Online')
+sig_on_data = spec.load_spect_params(sig_on_fn,wavelen=lam_on)
+sig_on = spec.calc_pca_spectrum(sig_on_data,temp_i,pres_i)
+
+sig_off_fn = spec.get_pca_filename('Abs',name='WV Offline')
+sig_off_data = spec.load_spect_params(sig_off_fn,wavelen=lam_off)
+sig_off = spec.calc_pca_spectrum(sig_off_data,temp_i,pres_i)
+
+dsig = sig_on-sig_off
+nWV_p = (-1.0/(2*(dsig)))*np.diff(rv.log_array(p_profs['WV Online'])-rv.log_array(p_profs['WV Offline']),axis=1)*(1.0/profs['WV Online'].mean_dR)
+nWV_p = nWV_p
+
+
+
 [eta_m,eta_c] = lp.RB_Efficiency([Trx['HSRL Mol'],Trx['HSRL Comb']],temp.profile.flatten(),pres.profile.flatten(),profs['HSRL Molecular'].wavelength,nu=nu,norm=True,max_size=10000)       
 eta_m = eta_m.reshape(temp.profile.shape)  
 #profs['HSRL Molecular'].gain_scale(MolGain,gain_var = (MolGain*0.05)**2)    
 eta_c = eta_c.reshape(temp.profile.shape)
 aer_beta,BSR,param_profs=wv.AerosolBackscatter(profs['HSRL Molecular'],profs['HSRL Combined'],beta_mol_sonde,negfilter=True,eta_am=Trx['HSRL Mol'][inu0],eta_ac=Trx['HSRL Comb'][inu0],eta_mm=eta_m,eta_mc=eta_c,gm=MolGain)
+
+mol_p = -1*(p_profs['HSRL Molecular']*Trx['HSRL Comb'][inu0]-MolGain*p_profs['HSRL Combined']*Trx['HSRL Mol'][inu0])*(1.0/(MolGain*(Trx['HSRL Mol'][inu0]*eta_c-Trx['HSRL Comb'][inu0]*eta_m)))
+aer_p = (p_profs['HSRL Molecular']*eta_c - MolGain*p_profs['HSRL Combined']*eta_m)*(1.0/(MolGain*(Trx['HSRL Mol'][inu0]*eta_c-Trx['HSRL Comb'][inu0]*eta_m)))
+#com_p = (-1*Trx['HSRL Comb'][inu0]/(MolGain*(Trx['HSRL Mol'][inu0]*eta_c-Trx['HSRL Comb'][inu0]*eta_m))+eta_c/(MolGain*(Trx['HSRL Mol'][inu0]*eta_c-Trx['HSRL Comb'][inu0]*eta_m)))*p_profs['HSRL Molecular'] \
+#        +(Trx['HSRL Mol'][inu0]*MolGain/(MolGain*(Trx['HSRL Mol'][inu0]*eta_c-Trx['HSRL Comb'][inu0]*eta_m))-MolGain*eta_m/(MolGain*(Trx['HSRL Mol'][inu0]*eta_c-Trx['HSRL Comb'][inu0]*eta_m)))*p_profs['HSRL Combined']
+
+#BSR_p = aer_p/mol_p+1
+#BSR_p = p_profs['HSRL Combined']/(MolGain*p_profs['HSRL Molecular'])
+
+b_coeff = [-Trx['HSRL Comb'][inu0]/(MolGain*(Trx['HSRL Mol'][inu0]*eta_c-Trx['HSRL Comb'][inu0]*eta_m)),MolGain*Trx['HSRL Mol'][inu0]/(MolGain*(Trx['HSRL Mol'][inu0]*eta_c-Trx['HSRL Comb'][inu0]*eta_m))]
+a_coeff = [eta_c/(MolGain*(Trx['HSRL Mol'][inu0]*eta_c-Trx['HSRL Comb'][inu0]*eta_m)),-MolGain*eta_m/(MolGain*(Trx['HSRL Mol'][inu0]*eta_c-Trx['HSRL Comb'][inu0]*eta_m))]
+h = lambda x,y,nx,ny: rv.h_mix_ratio(x,y,nx,ny,a=a_coeff,b=b_coeff)
+BSR_p = rv.h_two_var(p_profs['HSRL Molecular'],p_profs['HSRL Combined'],h)+1
+
+
 
 
 ## interpolate selected data onto retrieval grid
@@ -210,7 +254,63 @@ aer_beta,BSR,param_profs=wv.AerosolBackscatter(profs['HSRL Molecular'],profs['HS
 #    
 ##TAct = np.interp(fit_profs['BSR'].range_array,sim_vars['sim_range'],sim_vars['sim_T'])
 #nWVAct = np.interp(fit_profs['BSR'].range_array,sim_vars['sim_range'],sim_vars['sim_nWV'])
-##BSRAct = np.interp(fit_profs['BSR'].range_array,sim_vars['sim_range'],sim_vars['BSR_HSRL_Molecular'])
+BSRAct = np.interp(BSR.range_array,sim_vars['sim_range'],sim_vars['BSR_HSRL_Molecular'])
+
+
+
+plt.figure(figsize=(6.4,8.0)); 
+plt.fill_betweenx(nWV.range_array,
+                  nWV.profile[0,:]-1*np.sqrt(nWV.profile_variance[0,:]), \
+                  nWV.profile[0,:]+1*np.sqrt(nWV.profile_variance[0,:]), \
+                  color='r',alpha=0.2,label='First Order')
+plt.fill_betweenx(nWV.range_array, \
+                  rv.moment(nWV_p[0,:],num=1)-1*np.sqrt(rv.moment(nWV_p[0,:],num=2)), \
+                  rv.moment(nWV_p[0,:],num=1)+1*np.sqrt(rv.moment(nWV_p[0,:],num=2)),color='b',alpha=0.2,label='Third Order')
+plt.plot(nWV.profile.flatten(),nWV.range_array,'b-')
+plt.plot(rv.moment(nWV_p[0,:],num=0),nWV.range_array,'r-')
+plt.plot(sim_vars['sim_nWV'],sim_vars['sim_range'],'k--',label='actual')
+plt.xlabel('Water Vapor number density [$m^{-3}$]')
+plt.ylabel('Altitude [m]')
+plt.grid(b=True)
+plt.xlim([0,4e24])
+
+plt.figure(figsize=(6.4,8.0)); 
+plt.semilogx(nWV.profile.flatten(),nWV.range_array,'b-')
+plt.semilogx(np.sqrt(nWV.profile_variance.flatten()),nWV.range_array,'b:')
+plt.semilogx(rv.moment(nWV_p[0,:],num=0),nWV.range_array,'r-')
+plt.semilogx(np.sqrt(rv.moment(nWV_p[0,:],num=2)),nWV.range_array,'r:')
+#plt.plot(sim_vars['sim_nWV'],sim_vars['sim_range'],'k--',label='actual')
+plt.xlabel('Water Vapor number density [$m^{-3}$]')
+plt.ylabel('Altitude [m]')
+plt.grid(b=True)
+
+
+plt.figure(figsize=(6.4,8.0)); 
+plt.semilogx(BSR.profile.flatten(),BSR.range_array,'b-')
+plt.semilogx(np.sqrt(BSR.profile_variance.flatten()),BSR.range_array,'b:')
+plt.semilogx(rv.moment(BSR_p[0,:],num=0),BSR.range_array,'r-')
+plt.semilogx(np.sqrt(rv.moment(BSR_p[0,:],num=2)),BSR.range_array,'r:')
+plt.semilogx(BSRAct.flatten(),BSR.range_array,'k-',label='Actual')
+#plt.plot(sim_vars['sim_nWV'],sim_vars['sim_range'],'k--',label='actual')
+plt.xlabel('Backscatter Ratio')
+plt.ylabel('Altitude [m]')
+plt.grid(b=True)
+
+plt.figure(figsize=(6.4,8.0)); 
+plt.semilogx(np.ones(BSR_p.size).flatten(),BSR.range_array,'k--')
+plt.semilogx(2*np.ones(BSR_p.size).flatten(),BSR.range_array,'k:')
+plt.semilogx(((BSR.profile-1)/(np.sqrt(BSR.profile_variance))).flatten(),BSR.range_array,'b-',label='1st Order'); 
+plt.semilogx((rv.moment(BSR_p[0,:],num=1)-1)/(np.sqrt(rv.moment(BSR_p[0,:],num=2))),BSR.range_array,'r--',label='3rd Order');
+plt.xlabel('Backscatter Ratio SNR')
+plt.ylabel('Altitude [m]')
+plt.grid(b=True)
+
+plt.figure(); 
+plt.plot((BSR.profile.flatten()-BSRAct)/np.sqrt(BSR.profile_variance.flatten()),BSR.range_array,'b'); 
+plt.plot((rv.moment(BSR_p[0,:],num=1)-BSRAct)/np.sqrt(rv.moment(BSR_p[0,:],num=2)),BSR.range_array,'r--');
+plt.xlabel('Std. Normalized BSR Error')
+plt.ylabel('Altitude [m]')
+plt.grid(b=True)
 
 
 plt.figure()

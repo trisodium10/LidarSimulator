@@ -400,12 +400,12 @@ def TDGradientFunction(Prof,x,Trx,rb_spec,abs_spec,dr,inu0,bsrMult,base_T,base_P
         + np.nansum(WVonBase[np.newaxis]*dWVndB,axis=1) \
         + np.nansum(WVoffBase[np.newaxis]*dWVfdB,axis=1) \
         + np.nansum(O2onBase[np.newaxis]*dO2ndB,axis=1) \
-        + np.nansum(O2offBase[np.newaxis]*dO2fdB,axis=1)
-    # piecewise penalty function
-    gradpen = lam[2]*np.sign(np.diff(xS[:,2]))
-    gradpen[np.nonzero(np.isnan(gradpen))] = 0
-    grad2[2:,2] = grad2[2:,2] + gradpen
-    grad2[1:-1,2] = grad2[1:-1,2] - gradpen
+        + np.nansum(O2offBase[np.newaxis]*dO2fdB,axis=1)   
+#    #piecewise penalty function
+#    gradpen = lam[2]*np.sign(np.diff(xS[:,2]))
+#    gradpen[np.nonzero(np.isnan(gradpen))] = 0
+#    grad2[2:,2] = grad2[2:,2] + gradpen
+#    grad2[1:-1,2] = grad2[1:-1,2] - gradpen
     
 
     # *bsrMult['WV']
@@ -415,27 +415,27 @@ def TDGradientFunction(Prof,x,Trx,rb_spec,abs_spec,dr,inu0,bsrMult,base_T,base_P
 
     # HSRL Common terms
     grad2[1:,3] = np.nansum(HSRLmolBase[np.newaxis]*HSRL_mol,axis=0) + np.nansum(HSRLcombBase[np.newaxis]*HSRL_comb,axis=0)
-    # piece wise penalty function    
-    gradpen = lam[3]*np.sign(np.diff(xS[:,3]))
-    gradpen[np.nonzero(np.isnan(gradpen))] = 0
-    grad2[2:,3] = grad2[2:,3] + gradpen
-    grad2[1:-1,3] = grad2[1:-1,3] - gradpen
+#    # piece wise penalty function    
+#    gradpen = lam[3]*np.sign(np.diff(xS[:,3]))
+#    gradpen[np.nonzero(np.isnan(gradpen))] = 0
+#    grad2[2:,3] = grad2[2:,3] + gradpen
+#    grad2[1:-1,3] = grad2[1:-1,3] - gradpen
     
     # WV Common terms
     grad2[1:,4] = np.nansum(WVonBase[np.newaxis]*WV_on,axis=0) + np.nansum(WVoffBase[np.newaxis]*WV_off,axis=0)
-    # piece wise penalty function    
-    gradpen = lam[4]*np.sign(np.diff(xS[:,4]))
-    gradpen[np.nonzero(np.isnan(gradpen))] = 0
-    grad2[2:,4] = grad2[2:,4] + gradpen
-    grad2[1:-1,4] = grad2[1:-1,4] - gradpen
+#    # piece wise penalty function    
+#    gradpen = lam[4]*np.sign(np.diff(xS[:,4]))
+#    gradpen[np.nonzero(np.isnan(gradpen))] = 0
+#    grad2[2:,4] = grad2[2:,4] + gradpen
+#    grad2[1:-1,4] = grad2[1:-1,4] - gradpen
     
     # O2 Common terms
     grad2[1:,5] = np.nansum(O2onBase[np.newaxis]*O2_on,axis=0) + np.nansum(O2offBase[np.newaxis]*O2_off,axis=0)
-    # piece wise penalty function    
-    gradpen = lam[5]*np.sign(np.diff(xS[:,5]))
-    gradpen[np.nonzero(np.isnan(gradpen))] = 0
-    grad2[2:,5] = grad2[2:,5] + gradpen
-    grad2[1:-1,5] = grad2[1:-1,5] - gradpen
+#    # piece wise penalty function    
+#    gradpen = lam[5]*np.sign(np.diff(xS[:,5]))
+#    gradpen[np.nonzero(np.isnan(gradpen))] = 0
+#    grad2[2:,5] = grad2[2:,5] + gradpen
+#    grad2[1:-1,5] = grad2[1:-1,5] - gradpen
 
     grad2[0,0] = np.nansum(HSRLmolBase*HSRL_mol/xK[0])
     grad2[0,1] = np.nansum(HSRLcombBase*HSRL_comb/xK[1])
