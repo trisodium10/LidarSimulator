@@ -13,7 +13,7 @@ import MLELidarProfileFunctions as mle
 
 Cg = 5.2199
 
-def Build_TD_sparsa_Profiles(x,Const,dR=37.5,return_params=False,params={},n_conv=0,scale={'xB':1,'xN':1,'xT':1,'xPhi':1,'xPsi':1}):
+def Build_TD_sparsa_Profiles(x,Const,return_params=False,params={},n_conv=0,scale={'xB':1,'xN':1,'xT':1,'xPhi':1,'xPsi':1}):
     """
     Temperature is expected in K
     Pressure is expected in atm
@@ -45,7 +45,7 @@ def Build_TD_sparsa_Profiles(x,Const,dR=37.5,return_params=False,params={},n_con
     try:
         BSR = params['BSR']
         nWV = params['nWV']
-        T = params['Temperature']
+        T = params['T']
         phi = params['phi']
         psi = params['psi']
         
@@ -56,7 +56,7 @@ def Build_TD_sparsa_Profiles(x,Const,dR=37.5,return_params=False,params={},n_con
         
         beta = params['beta']  # molecular spectrum
         
-        nO2 = params['nO2']  # oxygen number density
+        nO2 = params['nO2']  # atmospheric number density (not actually just nO2)
 
     except KeyError:    
         BSR = np.exp(x['xB']*scale['xB'])+1 # backscatter ratio
@@ -85,6 +85,7 @@ def Build_TD_sparsa_Profiles(x,Const,dR=37.5,return_params=False,params={},n_con
         
         nO2 = Const['base_P'][:,np.newaxis]*T**4.2199/(lp.kB*Const['base_T'][:,np.newaxis]**5.2199)-nWV 
     
+    dR = Const['dR']
     i0 = Const['i0']  # index into transmission frequency
     
     To2on0 = np.exp(-dR*spec.fo2*np.cumsum(sigma_on[:,:,i0]*nO2,axis=1))  # center line transmission for O2
@@ -129,7 +130,7 @@ def Build_TD_sparsa_Profiles(x,Const,dR=37.5,return_params=False,params={},n_con
     if return_params:
         forward_profs['BSR'] = BSR.copy()
         forward_profs['nWV'] = nWV.copy()
-        forward_profs['Temperature'] = T.copy()
+        forward_profs['T'] = T.copy()
         forward_profs['phi'] = phi.copy()
         forward_profs['psi'] = psi.copy()
         
@@ -138,9 +139,9 @@ def Build_TD_sparsa_Profiles(x,Const,dR=37.5,return_params=False,params={},n_con
         forward_profs['sigma_on'] = sigma_on.copy() # oxygen absorption cross section
         forward_profs['sigma_off'] = sigma_off.copy() # oxygen absorption cross section
         
-        params['beta'] = beta.copy()  # molecular spectrum
+        forward_profs['beta'] = beta.copy()  # molecular spectrum
         
-        params['nO2'] = nO2.copy() # oxygen number density
+        forward_profs['nO2'] = nO2.copy() # atmospheric number density (not actually just nO2)
 
         if kconv.size > 1:
             forward_profs['kconv'] = kconv.copy()
@@ -156,8 +157,7 @@ def TD_sparsa_Error(x,fit_profs,Const,lam,weights=np.array([1]),scale={'xB':1,'x
     scale={'xB':1,'xS':1,'xP':1} is deprecated
     """
 
-    dR = fit_profs[list(fit_profs.keys())[0]].mean_dR
-    forward_profs = Build_TD_sparsa_Profiles(x,Const,dR=dR,return_params=True,scale=scale)
+    forward_profs = Build_TD_sparsa_Profiles(x,Const,return_params=True,scale=scale)
     
     ErrRet = 0    
     
@@ -189,13 +189,13 @@ def TD_sparsa_Error(x,fit_profs,Const,lam,weights=np.array([1]),scale={'xB':1,'x
     return ErrRet
 
 
-def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,dR=37.5,weights=np.array([1]),n_conv=0,scale={'xB':1,'xN':1,'xT':1,'xPhi':1,'xPsi':1}):
+def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,weights=np.array([1]),n_conv=0,scale={'xB':1,'xN':1,'xT':1,'xPhi':1,'xPsi':1}):
     """
     Analytical gradient of DLBHSRL_sparsa_Error()
     """
     
-    dR = fit_profs['Molecular'].mean_dR
-    forward_profs = Build_TD_sparsa_Profiles(x,Const,dR=dR,return_params=True,scale=scale)
+    dR = Const['dR']
+    forward_profs = Build_TD_sparsa_Profiles(x,Const,return_params=True,scale=scale)
     
     if 'kconv' in Const.keys():
         kconv = Const['kconv']
@@ -231,7 +231,7 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,dR=37.5,weights=np.array([1])
             
         if var == 'O2off':
             abs_spec[var]['Tatm0'] = np.exp(-dR*spec.fo2*np.cumsum(abs_spec[var]['sig']*forward_profs['nO2'],axis=1))
-        else:
+        elif 'WV' in var:
             abs_spec[var]['Tatm0'] = np.exp(-dR*np.cumsum(abs_spec[var]['sig']*forward_profs['nWV'],axis=1))
             
     #obtain models without nonlinear response or background
@@ -308,22 +308,22 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,dR=37.5,weights=np.array([1])
 #                Tatm = np.exp(-dR*spec.fo2*np.cumsum(sig*forward_profs['nO2'],axis=1))
                 
                 # compute each summed term separately
-                c = -e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0 \
+                c = -e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*Tatm0 \
                     *2*Const[var]['Trx'][i0]*Tatm0*(forward_profs['BSR']-1)
                 a = grad_o[:,:,i0]
-                gradErr['xT']+= np.cumsum(a[:,::-1,:]*np.cumsum(c[:,::-1],axis=1),axis=1)[:,::-1]
+                gradErr['xT']+= np.cumsum(a[:,::-1]*np.cumsum(c[:,::-1],axis=1),axis=1)[:,::-1]
                 
-                c = -e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0 \
+                c = -e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*Tatm0 \
                     *np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*Tatm*beta,axis=2)
 #                a = grad_o[:,:,i0]
-                gradErr['xT']+= np.cumsum(a[:,::-1,:]*np.cumsum(c[:,::-1],axis=1),axis=1)[:,::-1]
+                gradErr['xT']+= np.cumsum(a[:,::-1]*np.cumsum(c[:,::-1],axis=1),axis=1)[:,::-1]
                 
-                c1 = -e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0
+                c1 = -e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*Tatm0
                 c2 = Const[var]['Trx'][np.newaxis,np.newaxis,:]*Tatm*beta
                 a = grad_o
-                gradErr['xT']+= np.cumsum(np.nansum(a[:,::-1,:]*np.cumsum(c1[:,::-1],axis=1),axis=2)*np.cumsum(c2[:,::-1,:],axis=1),axis=1)[:,::-1]
+                gradErr['xT']+= np.cumsum(np.nansum(a[:,::-1,:]*np.cumsum(c2[:,::-1,:],axis=1),axis=2)*np.cumsum(c1[:,::-1],axis=1),axis=1)[:,::-1]
                 
-                gradErr['xT']+=scale['xT']*np.cumsum((e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0 \
+                gradErr['xT']+=scale['xT']*np.cumsum((e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*Tatm0 \
                     *np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*Tatm*dbetadT,axis=2))[:,::-1],axis=1)[:,::-1]
                     
                     
@@ -347,7 +347,7 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,dR=37.5,weights=np.array([1])
 #                Tatm0 = np.exp(-dR*spec.fo2*np.cumsum(sig*forward_profs['nO2'],axis=1))
                 
                 gradErr['xT']+= np.cumsum(grad_o[:,::-1]*np.cumsum((-2*e0[var]*sig_profs[var])[:,::-1],axis=1),axis=1)[:,::-1]
-                gradErr['xT']+= np.cumsum((e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0**2*np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*dbetadT,axis=2))[:,::-1],axis=1)[:,::-1]
+                gradErr['xT']+= np.cumsum((e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*Tatm0**2*np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*dbetadT,axis=2))[:,::-1],axis=1)[:,::-1]
                 
 #                gradErr['xT']+=e0[var]*(sig_profs[var]*(-2*grad_o) \
 #                        +Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0**2*np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*dbetadT,axis=2))
@@ -382,7 +382,7 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,dR=37.5,weights=np.array([1])
                 
                 c = -2*dR*e0[var]*sig_profs[var]
                 a = scale['xT']*dsigdT*forward_profs['nWV']
-                gradErr['xT']+= np.cumsum(a[:,::-1,:]*np.cumsum(c[:,::-1],axis=1),axis=1)[:,::-1]
+                gradErr['xT']+= np.cumsum(a[:,::-1]*np.cumsum(c[:,::-1],axis=1),axis=1)[:,::-1]
                 
                 
                 
@@ -400,13 +400,13 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,dR=37.5,weights=np.array([1])
                 
                 
                 gradErr['xN']+= -2*grad_o[:,:,i0]*np.cumsum((e0[var]*Gain*Const[var]['mult'] \
-                       *forward_profs['Phi']*Tatm0**2*Const[var]['Trx'][i0]*(forward_profs['BSR']-1))[:,::-1],axis=1)[:,::-1]
+                       *forward_profs['phi']*Tatm0**2*Const[var]['Trx'][i0]*(forward_profs['BSR']-1))[:,::-1],axis=1)[:,::-1]
                 
                 gradErr['xN']+= grad_o[:,:,i0]*np.cumsum((-e0[var]*Gain*Const[var]['mult'] \
-                       *forward_profs['Phi']*Tatm0*np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*Tatm*beta,axis=2))[:,::-1],axis=1)[:,::-1]
+                       *forward_profs['phi']*Tatm0*np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*Tatm*beta,axis=2))[:,::-1],axis=1)[:,::-1]
                 
                 gradErr['xN']+= np.nansum(grad_o*np.cumsum((Const[var]['Trx'][np.newaxis,np.newaxis,:]*Tatm*beta)[:,::-1,:],axis=1)[:,::-1,:],axis=2) \
-                    *np.cumsum((-e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0)[:,::-1],axis=1)[:,::-1]
+                    *np.cumsum((-e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*Tatm0)[:,::-1],axis=1)[:,::-1]
                 
 #                # original
 #                gradErr['xN']+= -e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0 \
@@ -414,9 +414,9 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,dR=37.5,weights=np.array([1])
 #                        +grad_o[:,:,i0]*np.nansum(Const[var]['Trx']*Tatm*beta,axis=2)+np.nansum(Const[var]['Trx']*Tatm*beta*grad_o,axis=2))
             elif 'CombOffline' in var:
                 
-                sig = abs_spec['O2on']['sig']
-                dsigdT = abs_spec['O2on']['dsigdT']
-                Tatm0 = abs_spec['O2on']['Tatm0']
+                sig = abs_spec['O2off']['sig']
+                dsigdT = abs_spec['O2off']['dsigdT']
+                Tatm0 = abs_spec['O2off']['Tatm0']
                 
                 grad_o = -dR*spec.fo2*sig*forward_profs['nWV']*scale['xN']
                 
@@ -439,7 +439,7 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,dR=37.5,weights=np.array([1])
         
         if 'xB' in gradErr.keys():
             if not 'WV' in var and 'Online' in var:
-                gradErr['xB']+= Gain*Const[var]['mult']*forward_profs['Phi']*abs_spec['O2on']['Tatm0']**2*Const[var]['Trx'][i0]*(forward_profs['BSR']-1)*scale['xB']
+                gradErr['xB']+= Gain*Const[var]['mult']*forward_profs['phi']*abs_spec['O2on']['Tatm0']**2*Const[var]['Trx'][i0]*(forward_profs['BSR']-1)*scale['xB']
             
         if 'xPhi' in gradErr.keys():
             if 'Comb' in var or 'Mol' in var:

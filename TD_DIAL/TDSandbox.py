@@ -43,7 +43,8 @@ r_lim = [0.3e3,4e3]
 step_eps = 1e-7 #1e-7 #2e-5
 max_iter = 1000 #1500
 deconv = True
-lam_set = {'xB':30.0,'xN':49.8,'xT':150.0,'xPhi':64.0,'xPsi':64.0}
+#lam_set = {'xB':30.0,'xN':49.8,'xT':150.0,'xPhi':64.0,'xPsi':64.0}
+lam_set = {'xB':0,'xN':0,'xT':0,'xPhi':0,'xPsi':0} # for validating gradient function
 lam_range0 = {'xB':[0,2],'xN':[1.0,2.0],'xT':[2.0,3.0],'xPhi':[1.0,2.0],'xPsi':[1.0,2.0]}  # note these search bounds are log10
 #Num_reg_iter = 1
 verbose = False
@@ -313,7 +314,7 @@ for denoise_step in range(t_start_list.size):
             raw_profs[var] = profs[var].copy()
             raw_profs[var].profile = raw_profs[var].profile*raw_profs[var].NumProfList[:,np.newaxis]
             raw_profs[var].bg = raw_profs[var].bg*raw_profs[var].NumProfList
-    LidarNumber = np.int(profs[var].lidar[-1])
+    LidarNumber = np.int(profs['CombOnline'].lidar[-1])
 
     #%%  Load cals and trim them
     """
@@ -415,6 +416,7 @@ for denoise_step in range(t_start_list.size):
             ConstTerms[var]['Trx'] = spec.CellTransmission(nu_pca+lp.c/raw_profs[var].wavelength,CellTemp,CellPressure,CellLength,spec.KD1defs,iso=iso_list)
         ConstTerms[var]['rate_adj'] = (thin_adj*1.0/(raw_profs[var].shot_count*raw_profs[var].binwidth_ns*1e-9))[:,np.newaxis]
 
+    ConstTerms['dR'] = raw_profs[var].mean_dR
     
     if deconv:
         # add laser pulse
@@ -443,6 +445,7 @@ for denoise_step in range(t_start_list.size):
             ConstTerms['absPCA']['O2off'] = spec.load_spect_params(sig_file,wavelen=np.array([raw_profs[var].wavelength]))
 
     ConstTerms['i0'] = np.argmin(np.abs(ConstTerms['molPCA']['O2']['nu_pca']))
+    
     
     """
     # Test code
@@ -479,8 +482,8 @@ for denoise_step in range(t_start_list.size):
     # Channel Order:
     # 'WVOnline', 'WVOffline', 'MolOnline', 'MolOffline', 'CombOnline', 'CombOffline'
     x0 = {}
-    x0['xG'] = [0,0,-1,0,-1,0]
-    x0['xDT'] = [np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9)]
+    x0['xG'] = np.array([0,0,-1,0,-1,0])
+    x0['xDT'] = np.array([np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9)])
     x0['xPhi'] = np.log((raw_profs['CombOffline'].profile - raw_profs['CombOffline'].bg[:,np.newaxis])/ConstTerms['CombOffline']['mult'])
     x0['xPsi'] = np.log((raw_profs['WVOffline'].profile - raw_profs['WVOffline'].bg[:,np.newaxis])/ConstTerms['WVOffline']['mult'])
     x0['xN'] = np.log(profs['Absolute_Humidity'].profile*lp.N_A/lp.mH2O)
@@ -493,9 +496,12 @@ for denoise_step in range(t_start_list.size):
             x0[var][np.isnan(x0[var])] = opt_bounds[var][0]
     
     
-    initial_profs = td.Build_TD_sparsa_Profiles(x0,ConstTerms,dR=37.5,return_params=True,scale=var_scale)     # ,scale={'xB':1,'xN':1,'xT':1,'xPhi':1,'xPsi':1}
+    initial_profs = td.Build_TD_sparsa_Profiles(x0,ConstTerms,return_params=True,scale=var_scale)     # ,scale={'xB':1,'xN':1,'xT':1,'xPhi':1,'xPsi':1}
     
-    FitError = td.TD_sparsa_Error(x0,raw_profs,ConstTerms,lam_set,scale=var_scale)
+    ErrorFunc = lambda x: td.TD_sparsa_Error(x,raw_profs,ConstTerms,lam_set,scale=var_scale)
+    GradErrorFunc = lambda x: td.TD_sparsa_Error_Gradient(x,raw_profs,ConstTerms,lam_set,scale=var_scale)
+    
+    
     
     """
     # Test initial profiles
@@ -503,4 +509,21 @@ for denoise_step in range(t_start_list.size):
     plt.figure();
     plt.semilogy(raw_profs[var].profile[3,:]); 
     plt.semilogy(initial_profs[var][3,:])
+    
+    FitError = td.TD_sparsa_Error(x0,raw_profs,ConstTerms,lam_set,scale=var_scale)
     """
+    
+    
+    
+    # Test Gradient Functions
+    gradNum = mle.Num_Gradient_Dict(ErrorFunc,x0,step_size=1e-5)
+    gradDirect = GradErrorFunc(x0)
+    
+    for gvar in gradNum.keys():
+        plt.figure()
+        plt.title(gvar)
+        plt.plot(gradNum[gvar].flatten(),label='Numeric')
+        plt.plot(gradDirect[gvar].flatten(),'--',label='Direct')
+        plt.legend()
+    
+    
