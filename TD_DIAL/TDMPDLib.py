@@ -13,6 +13,8 @@ import MLELidarProfileFunctions as mle
 
 Cg = 5.2199
 
+kB = lp.kB*9.86923e-6  # convert Boltzman constant from pressure in Pa to atm
+
 def Build_TD_sparsa_Profiles(x,Const,return_params=False,params={},n_conv=0,scale={'xB':1,'xN':1,'xT':1,'xPhi':1,'xPsi':1}):
     """
     Temperature is expected in K
@@ -83,7 +85,7 @@ def Build_TD_sparsa_Profiles(x,Const,return_params=False,params={},n_conv=0,scal
         beta = beta.reshape((Const['molPCA']['O2']['nu_pca'].size,BSR.shape[0],BSR.shape[1]))
         beta = beta.transpose((1,2,0))
         
-        nO2 = Const['base_P'][:,np.newaxis]*T**4.2199/(lp.kB*Const['base_T'][:,np.newaxis]**5.2199)-nWV 
+        nO2 = Const['base_P'][:,np.newaxis]*T**4.2199/(kB*Const['base_T'][:,np.newaxis]**5.2199)-nWV 
     
     dR = Const['dR']
     i0 = Const['i0']  # index into transmission frequency
@@ -300,9 +302,9 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,weights=np.array([1]),n_conv=
 
                 # temperature gradient for optical depth
 #                grad_o = scale['xT']*np.cumsum(np.cumsum((dR*spec.fo2*dsigdT*(forward_profs['nO2']-forward_profs['nWV'])[:,:,np.newaxis] \
-#                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis,np.newaxis]/(lp.kB*Const['base_T'][:,np.newaxis,np.newaxis]**Cg)*forward_profs['T'][:,:,np.newaxis])[:,::-1,:],axis=1),axis=1)[:,::-1,:]
+#                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis,np.newaxis]/(kB*Const['base_T'][:,np.newaxis,np.newaxis]**Cg)*forward_profs['T'][:,:,np.newaxis])[:,::-1,:],axis=1),axis=1)[:,::-1,:]
                 grad_o = scale['xT']*(dR*spec.fo2*dsigdT*(forward_profs['nO2']-forward_profs['nWV'])[:,:,np.newaxis] \
-                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis,np.newaxis]/(lp.kB*Const['base_T'][:,np.newaxis,np.newaxis]**Cg)*forward_profs['T'][:,:,np.newaxis])
+                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis,np.newaxis]/(kB*Const['base_T'][:,np.newaxis,np.newaxis]**Cg)*forward_profs['T'][:,:,np.newaxis])
                 
 #                Tatm0 = np.exp(-dR*spec.fo2*np.cumsum(sig[:,:,i0]*forward_profs['nO2'],axis=1))
 #                Tatm = np.exp(-dR*spec.fo2*np.cumsum(sig*forward_profs['nO2'],axis=1))
@@ -342,7 +344,7 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,weights=np.array([1]),n_conv=
 #                sig = sig.reshape(forward_profs['T'].shape)
 #                dsigdT = dsigdT.reshape(forward_profs['T'].shape)
                 grad_o = scale['xT']*(dR*spec.fo2*dsigdT*(forward_profs['nO2']-forward_profs['nWV']) \
-                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis]/(lp.kB*Const['base_T'][:,np.newaxis]**Cg)*forward_profs['T'])
+                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis]/(kB*Const['base_T'][:,np.newaxis]**Cg)*forward_profs['T'])
                 
 #                Tatm0 = np.exp(-dR*spec.fo2*np.cumsum(sig*forward_profs['nO2'],axis=1))
                 
@@ -361,7 +363,7 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,weights=np.array([1]),n_conv=
 #                sig = sig.reshape(forward_profs['T'].shape)
 #                dsigdT = dsigdT.reshape(forward_profs['T'].shape)
                 grad_o = scale['xT']*(dR*spec.fo2*dsigdT*(forward_profs['nO2']-forward_profs['nWV']) \
-                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis]/(lp.kB*Const['base_T'][:,np.newaxis]**Cg)*forward_profs['T'])
+                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis]/(kB*Const['base_T'][:,np.newaxis]**Cg)*forward_profs['T'])
                 
 #                Tatm0 = np.exp(-dR*spec.fo2*np.cumsum(sig*forward_profs['nO2'],axis=1))
                 gradErr['xT']+= np.cumsum(grad_o[:,::-1]*np.cumsum((-2*e0[var]*sig_profs[var])[:,::-1],axis=1),axis=1)[:,::-1]
