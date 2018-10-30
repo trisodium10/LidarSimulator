@@ -438,16 +438,19 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,weights=np.array([1]),n_conv=
                 
         
         if 'xB' in gradErr.keys():
-            if not 'WV' in var and 'Online' in var:
-                gradErr['xB']+= Gain*Const[var]['mult']*forward_profs['phi']*abs_spec['O2on']['Tatm0']**2*Const[var]['Trx'][i0]*(forward_profs['BSR']-1)*scale['xB']
-            
+            if not 'WV' in var: 
+                if 'Online' in var:
+                    gradErr['xB']+= e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*abs_spec['O2on']['Tatm0']**2*Const[var]['Trx'][i0]*(forward_profs['BSR']-1)*scale['xB']
+                elif 'Offline' in var:
+                    gradErr['xB']+= e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*abs_spec['O2off']['Tatm0']**2*Const[var]['Trx'][i0]*(forward_profs['BSR']-1)*scale['xB']
+                    
         if 'xPhi' in gradErr.keys():
             if 'Comb' in var or 'Mol' in var:
-                gradErr['xPhi']+=sig_profs[var]*scale['xPhi']
+                gradErr['xPhi']+=e0[var]*sig_profs[var]*scale['xPhi']
         
         if 'xPsi' in gradErr.keys():
             if 'WV' in var:
-                gradErr['xPsi']+=sig_profs[var]*scale['xPsi']
+                gradErr['xPsi']+=e0[var]*sig_profs[var]*scale['xPsi']
             
             
     if kconv.size > 1:
