@@ -257,6 +257,7 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,dR=37.5,weights=np.array([1])
         e0[var] = (1-corrected_fit_profs/forward_profs[var])  # error function derivative
 #        e_dt[var] = dt[:,np.newaxis]**2/(dt[:,np.newaxis]+lin_profs[var]*deadtime)**2  # dead time derivative
 #        grad0[var] = dR*(np.sum(e0[var]*sig_profs[var],axis=1)[:,np.newaxis]-np.cumsum(e0[var]*sig_profs[var],axis=1))
+        
         grad0[var] = np.cumsum((e0[var]*sig_profs[var])[:,::-1],axis=1)[:,::-1]
     
         # dead time gradient term
@@ -275,35 +276,93 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,dR=37.5,weights=np.array([1])
                 dsigdT = dsigdT.transpose((1,2,0))
 
                 # temperature gradient for optical depth
-                grad_o = scale['xT']*np.cumsum(np.cumsum((dR*spec.fo2*dsigdT*(forward_profs['nO2']-forward_profs['nWV'])[:,:,np.newaxis] \
-                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis,np.newaxis]/(lp.kB*Const['base_T'][:,np.newaxis,np.newaxis]**Cg)*forward_profs['T'][:,:,np.newaxis])[:,::-1,:],axis=1),axis=1)[:,::-1,:]
+#                grad_o = scale['xT']*np.cumsum(np.cumsum((dR*spec.fo2*dsigdT*(forward_profs['nO2']-forward_profs['nWV'])[:,:,np.newaxis] \
+#                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis,np.newaxis]/(lp.kB*Const['base_T'][:,np.newaxis,np.newaxis]**Cg)*forward_profs['T'][:,:,np.newaxis])[:,::-1,:],axis=1),axis=1)[:,::-1,:]
+                grad_o = scale['xT']*(dR*spec.fo2*dsigdT*(forward_profs['nO2']-forward_profs['nWV'])[:,:,np.newaxis] \
+                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis,np.newaxis]/(lp.kB*Const['base_T'][:,np.newaxis,np.newaxis]**Cg)*forward_profs['T'][:,:,np.newaxis])
+                
                 Tatm0 = np.exp(-dR*spec.fo2*np.cumsum(sig[:,:,i0]*forward_profs['nO2'],axis=1))
                 Tatm = np.exp(-dR*spec.fo2*np.cumsum(sig*forward_profs['nO2'],axis=1))
                 
-                gradErr['xT']+= -e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0 \
-                        *(2*grad_o[:,:,i0]*Const[var]['Trx'][i0]*Tatm0*(forward_profs['BSR']-1) \
-                        +grad_o[:,:,i0]*np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*Tatm*beta,axis=2) \
-                        +np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*Tatm*(beta*grad_o-dbetadT),axis=2))
+                # compute each summed term separately
+                c = -e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0 \
+                    *2*Const[var]['Trx'][i0]*Tatm0*(forward_profs['BSR']-1)
+                a = grad_o[:,:,i0]
+                gradErr['xT']+= np.cumsum(a[:,::-1,:]*np.cumsum(c[:,::-1],axis=1),axis=1)[:,::-1]
+                
+                c = -e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0 \
+                    *np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*Tatm*beta,axis=2)
+#                a = grad_o[:,:,i0]
+                gradErr['xT']+= np.cumsum(a[:,::-1,:]*np.cumsum(c[:,::-1],axis=1),axis=1)[:,::-1]
+                
+                c1 = -e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0
+                c2 = Const[var]['Trx'][np.newaxis,np.newaxis,:]*Tatm*beta
+                a = grad_o
+                gradErr['xT']+= np.cumsum(np.nansum(a[:,::-1,:]*np.cumsum(c1[:,::-1],axis=1),axis=2)*np.cumsum(c2[:,::-1],axis=1),axis=1)[:,::-1]
+                
+                gradErr['xT']+=scale['xT']*np.cumsum((e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0 \
+                    *np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*Tatm*dbetadT,axis=2))[:,::-1],axis=1)[:,::-1]
+                    
+                    
+                
+#                gradErr['xT']+= -e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0 \
+#                        *(2*grad_o[:,:,i0]*Const[var]['Trx'][i0]*Tatm0*(forward_profs['BSR']-1) \
+#                        +grad_o[:,:,i0]*np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*Tatm*beta,axis=2) \
+#                        +np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*Tatm*(beta*grad_o-dbetadT),axis=2))
             
-            if 'MolOffline' in var:
+            elif 'MolOffline' in var:
                 sig,dsigdT = spec.calc_pca_T_spectrum_w_deriv(Const['absPCA']['O2off'],forward_profs['T'],Const['base_T'],Const['base_P']) # oxygen absorption cross section
                 sig = sig.reshape(forward_profs['T'].shape)
                 dsigdT = dsigdT.reshape(forward_profs['T'].shape)
-                grad_o = scale['xT']*np.cumsum(np.cumsum((dR*spec.fo2*dsigdT*(forward_profs['nO2']-forward_profs['nWV']) \
-                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis]/(lp.kB*Const['base_T'][:,np.newaxis]**Cg)*forward_profs['T'])[:,::-1],axis=1),axis=1)[:,::-1]
+                grad_o = scale['xT']*(dR*spec.fo2*dsigdT*(forward_profs['nO2']-forward_profs['nWV']) \
+                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis]/(lp.kB*Const['base_T'][:,np.newaxis]**Cg)*forward_profs['T'])
                 
                 Tatm0 = np.exp(-dR*spec.fo2*np.cumsum(sig*forward_profs['nO2'],axis=1))
                 
-                gradErr['xT']+=e0[var]*(sig_profs[var]*(-2*grad_o) \
-                        +Gain*Const[var]['mult']*forward_profs['Phi']*Tatm**2*np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*beta,axis=2))
+                gradErr['xT']+= np.cumsum(grad_o[:,::-1]*np.cumsum((-2*e0[var]*sig_profs[var])[:,::-1],axis=1),axis=1)[:,::-1]
+                gradErr['xT']+= e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0**2*np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*dbetadT,axis=2)
+                
+#                gradErr['xT']+=e0[var]*(sig_profs[var]*(-2*grad_o) \
+#                        +Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0**2*np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*dbetadT,axis=2))
                         
-            if 'CombOffline' in var:
+            elif 'CombOffline' in var:
+                sig,dsigdT = spec.calc_pca_T_spectrum_w_deriv(Const['absPCA']['O2off'],forward_profs['T'],Const['base_T'],Const['base_P']) # oxygen absorption cross section
+                sig = sig.reshape(forward_profs['T'].shape)
+                dsigdT = dsigdT.reshape(forward_profs['T'].shape)
+                grad_o = scale['xT']*(dR*spec.fo2*dsigdT*(forward_profs['nO2']-forward_profs['nWV']) \
+                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis]/(lp.kB*Const['base_T'][:,np.newaxis]**Cg)*forward_profs['T'])
+                
+                Tatm0 = np.exp(-dR*spec.fo2*np.cumsum(sig*forward_profs['nO2'],axis=1))
+                gradErr['xT']+= np.cumsum(grad_o[:,::-1]*np.cumsum((-2*e0[var]*sig_profs[var])[:,::-1],axis=1),axis=1)[:,::-1]
+                
+            elif 'WV' in var:
+                if 'Online' in var:
+                    spec_def = 'WVon'
+                elif 'Offline' in var:
+                    spec_def = 'WVoff'
+                    
+                sig,dsigdT = spec.calc_pca_T_spectrum_w_deriv(Const['absPCA'][spec_def],forward_profs['T'],Const['base_T'],Const['base_P']) # oxygen absorption cross section
+                sig = sig.reshape(forward_profs['T'].shape)
+                dsigdT = dsigdT.reshape(forward_profs['T'].shape)
+                
+                c = -2*dR*e0[var]*sig_profs[var]
+                a = scale['xT']*dsigdT*forward_profs['nWV']
+                gradErr['xT']+= np.cumsum(a[:,::-1,:]*np.cumsum(c[:,::-1],axis=1),axis=1)[:,::-1]
+                
+                
                 
         if 'xN' in gradErr.keys():
             if not 'WV' in var and 'Online' in var:
                 # water vapor gradient for optical depth    
                 grad_o = dR*spec.fo2*sig*forward_profs['nWV'][:,:,np.newaxis]*scale['xN']
                 
+                gradErr['xN']+= -2*grad_o[:,:,i0]*np.cumsum((e0[var]*Gain*Const[var]['mult'] \
+                       *forward_profs['Phi']*Tatm0**2*Const[var]['Trx'][i0]*(forward_profs['BSR']-1))[:,::-1],axis=1)[:,::-1]
+                
+                gradErr['xN']+= -np.nansum(grad_o*np.cumsum((Const[var]['Trx']*Tatm*beta)[:,::-1],axis=1)[:,::-1],axis=2) \
+                    *grad_o[:,:,i0]*np.cumsum((e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0))
+                
+                # original
                 gradErr['xN']+= -e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0 \
                         *(2*grad_o[:,:,i0]*Const[var]['Trx'][i0]*Tatm0*(forward_profs['BSR']-1) \
                         +grad_o[:,:,i0]*np.nansum(Const[var]['Trx']*Tatm*beta,axis=2)+np.nansum(Const[var]['Trx']*Tatm*beta*grad_o,axis=2))
