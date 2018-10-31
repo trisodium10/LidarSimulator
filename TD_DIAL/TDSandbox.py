@@ -482,9 +482,10 @@ for denoise_step in range(t_start_list.size):
     # Channel Order:
     # 'WVOnline', 'WVOffline', 'MolOnline', 'MolOffline', 'CombOnline', 'CombOffline'
     x0 = {}
-    x0['xG'] = np.array([0.0001,0.0001,-1,0,-1,0.0001])
+    x0['xG'] = np.array([-0.1,0.0001,1.6,1.5,1.6,1.6])
     x0['xDT'] = np.array([np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9)])
-    x0['xPhi'] = np.log((raw_profs['CombOffline'].profile - raw_profs['CombOffline'].bg[:,np.newaxis])/ConstTerms['CombOffline']['mult'])
+#    x0['xPhi'] = np.log((raw_profs['CombOffline'].profile - raw_profs['CombOffline'].bg[:,np.newaxis])/(ConstTerms['CombOffline']['mult']*np.exp(x0['xG'][5])*profs['Backscatter_Ratio'].profile))
+    x0['xPhi'] = np.log((raw_profs['MolOffline'].profile - raw_profs['MolOffline'].bg[:,np.newaxis])/(ConstTerms['MolOffline']['mult']))
     x0['xPsi'] = np.log((raw_profs['WVOffline'].profile - raw_profs['WVOffline'].bg[:,np.newaxis])/ConstTerms['WVOffline']['mult'])
     x0['xN'] = np.log(profs['Absolute_Humidity'].profile*lp.N_A/lp.mH2O)
     x0['xT'] = np.concatenate((np.zeros(profs['Surf_T'].profile.shape),np.diff(profs['Temperature'].profile,axis=1)),axis=1)
@@ -505,10 +506,11 @@ for denoise_step in range(t_start_list.size):
     
     """
     # Test initial profiles
-    var = 'CombOnline'
-    plt.figure();
-    plt.semilogy(raw_profs[var].profile[3,:]); 
-    plt.semilogy(initial_profs[var][3,:])
+    for var in raw_profs.keys():
+        plt.figure();
+        plt.semilogy(raw_profs[var].profile[3,:],label='Data'); 
+        plt.semilogy(initial_profs[var][3,:],label='Model')
+        plt.title(var)
     
     FitError = td.TD_sparsa_Error(x0,raw_profs,ConstTerms,lam_set,scale=var_scale)
     """
@@ -529,6 +531,14 @@ for denoise_step in range(t_start_list.size):
     
     sol,[error_hist,step_hist]= mle.GVHSRL_sparsa_optimizor(ErrorFunc,GradErrorFunc,x0,lam_set,sub_eps=1e-5,step_eps=step_eps,opt_cnt_min=10,opt_cnt_max=max_iter,cnt_alpha_max=10,sigma=1e-5,verbose=False,alpha = 1e15)
     sol_profs = td.Build_TD_sparsa_Profiles(sol,ConstTerms,return_params=True,scale=var_scale)
+
+plt.figure()
+plt.plot(error_hist)
+
+plt.figure()
+plt.plot(step_hist)
+
+
 #
 #        if not verify:
 #            prof_sol = mle.Build_WVDIAL_sparsa_Profiles(sol,ConstTerms,dt=rate_adj,return_params=True,scale=scale)
