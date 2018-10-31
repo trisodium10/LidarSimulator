@@ -43,11 +43,11 @@ r_lim = [0.3e3,4e3]
 step_eps = 1e-7 #1e-7 #2e-5
 max_iter = 1000 #1500
 deconv = True
-#lam_set = {'xB':30.0,'xN':49.8,'xT':150.0,'xPhi':64.0,'xPsi':64.0}
-lam_set = {'xB':0,'xN':0,'xT':0,'xPhi':0,'xPsi':0} # for validating gradient function
+lam_set = {'xB':30.0,'xN':49.8,'xT':150.0,'xPhi':64.0,'xPsi':64.0}
+#lam_set = {'xB':0,'xN':0,'xT':0,'xPhi':0,'xPsi':0} # for validating gradient function
 lam_range0 = {'xB':[0,2],'xN':[1.0,2.0],'xT':[2.0,3.0],'xPhi':[1.0,2.0],'xPsi':[1.0,2.0]}  # note these search bounds are log10
 #Num_reg_iter = 1
-verbose = False
+verbose = True
 plot_results = False
 show_plots = True
 opt_setting = {'Num_reg_first':10,  # number of times to evaluate the regularizer during the first profile
@@ -482,12 +482,12 @@ for denoise_step in range(t_start_list.size):
     # Channel Order:
     # 'WVOnline', 'WVOffline', 'MolOnline', 'MolOffline', 'CombOnline', 'CombOffline'
     x0 = {}
-    x0['xG'] = np.array([0,0,-1,0,-1,0])
+    x0['xG'] = np.array([0.0001,0.0001,-1,0,-1,0.0001])
     x0['xDT'] = np.array([np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9)])
     x0['xPhi'] = np.log((raw_profs['CombOffline'].profile - raw_profs['CombOffline'].bg[:,np.newaxis])/ConstTerms['CombOffline']['mult'])
     x0['xPsi'] = np.log((raw_profs['WVOffline'].profile - raw_profs['WVOffline'].bg[:,np.newaxis])/ConstTerms['WVOffline']['mult'])
     x0['xN'] = np.log(profs['Absolute_Humidity'].profile*lp.N_A/lp.mH2O)
-    x0['xT'] = np.concatenate((profs['Surf_T'].profile,np.diff(profs['Temperature'].profile,axis=1)),axis=1)
+    x0['xT'] = np.concatenate((np.zeros(profs['Surf_T'].profile.shape),np.diff(profs['Temperature'].profile,axis=1)),axis=1)
     x0['xB'] = np.log(profs['Backscatter_Ratio'].profile-1)
     
     # set nan values to minimum
@@ -514,9 +514,9 @@ for denoise_step in range(t_start_list.size):
     """
     
     
-    
+    """
     # Test Gradient Functions
-    gradNum = mle.Num_Gradient_Dict(ErrorFunc,x0,step_size=1e-5)
+    gradNum = mle.Num_Gradient_Dict(ErrorFunc,x0,step_size=1e-3)
     gradDirect = GradErrorFunc(x0)
     
     for gvar in gradNum.keys():
@@ -525,5 +525,203 @@ for denoise_step in range(t_start_list.size):
         plt.plot(gradNum[gvar].flatten(),label='Numeric')
         plt.plot(gradDirect[gvar].flatten(),'--',label='Direct')
         plt.legend()
+    """
     
-    
+    sol,[error_hist,step_hist]= mle.GVHSRL_sparsa_optimizor(ErrorFunc,GradErrorFunc,x0,lam_set,sub_eps=1e-5,step_eps=step_eps,opt_cnt_min=10,opt_cnt_max=max_iter,cnt_alpha_max=10,sigma=1e-5,verbose=False,alpha = 1e15)
+    sol_profs = td.Build_TD_sparsa_Profiles(sol,ConstTerms,return_params=True,scale=var_scale)
+#
+#        if not verify:
+#            prof_sol = mle.Build_WVDIAL_sparsa_Profiles(sol,ConstTerms,dt=rate_adj,return_params=True,scale=scale)
+#    
+#        
+#        ProfileLogError = mle.WVDIAL_sparsa_Error(sol,verify_profs,ConstTerms,lam0,dt=rate_adj,scale=scale)    
+#        
+#    
+#        errRecord.extend([error_hist])
+#        stepRecord.extend([step_hist])
+#        lam_List.extend([lam.copy()])
+#        lam_sets.extend([[lam['xN'],lam['xPhi'],ProfileLogError]])
+#        tv_sublist = []
+#        for xvar in ['xN','xPhi']:
+#            tv_sublist.extend([np.nansum(np.abs(np.diff(sol[xvar],axis=1)))+np.nansum(np.abs(np.diff(sol[xvar],axis=0)))])
+#        tv_list.extend([tv_sublist])
+#        fitErrors[i_lam] = np.nansum(ProfileLogError)
+#        sol_List.extend([sol.copy()])        
+#        if verbose:
+#            print('Iteration: %d'%i_lam)
+#            print('SPARSA iterations: %d'%len(error_hist))
+#            print('Log Error: %f'%fitErrors[i_lam])
+#            print('lambda nWV, phi')
+#            print('    %e | %e '%(lam['xN'],lam['xPhi']))
+#            print('TV nWV, phi')
+#            print('    %e | %e '%(tv_sublist[0],tv_sublist[1]))
+#            print('')
+#    
+#    ### End Optimization Routine ###
+#    
+#    #%% Save and Plot Results
+#    
+#    isol = np.argmin(fitErrors)
+#    lam_sets = np.array(lam_sets)
+#    tv_list = np.array(tv_list)
+#    
+#    print('Solution:')
+#    print('lambda nWV, phi')
+#    print('    %e | %e '%(lam_sets[isol,0],lam_sets[isol,1]))
+#    
+#    if save_results and lam_sets.shape[0] > 1:
+#        np.savez(save_path+save_file+'3D_opt_results_WVDIAL'+datetime.datetime.now().strftime('%Y%m%dT%H%M'),lam_sets=lam_sets,tv_list=tv_list,rate_adj=rate_adj)
+#        pickle.dump(ConstTerms,open( save_path+save_file+'_ConstTerms.p', "wb" ))
+#        pickle.dump(scale,open( save_path+save_file+'_scale.p', "wb" ))
+#        pickle.dump(x0,open( save_path+save_file+'_x0.p', "wb" ))
+#        pickle.dump(sol_List[isol],open( save_path+save_file+'_solution.p', "wb" ))
+#    
+#    lam_error_scale = lam_sets[:,2]-np.nanmin(lam_sets[:,2])
+#    lam_error_scale = lam_error_scale/np.nanmax(lam_error_scale)
+#
+#    if plot_results:
+#                
+#        # 2D regularizer
+#        plt.figure()
+#        plt.scatter(lam_sets[:,0],lam_sets[:,1],c=lam_sets[:,2])
+#        plt.xlabel(r'$\lambda_{n}$')
+#        plt.ylabel(r'$\lambda_{\phi}$')
+#        plt.xscale('log')
+#        plt.yscale('log')
+#        plt.colorbar()
+#        if save_results and lam_sets.shape[0] > 1:
+#            plt.savefig(save_path+save_file+'_compare_regularizer.png',dpi=300)
+#        
+#
+#        
+#        if lam_sets.shape[0] > 1:
+#            from matplotlib.mlab import griddata
+#            lam_mask = np.ones(lam_error_scale.shape)
+#            #lam_mask[lam_error_scale >0.2] = np.nan
+#            xgrid = np.logspace(np.log10(lam_sets[:,0].min()),np.log10(lam_sets[:,0].max()),50)
+#            ygrid = np.logspace(np.log10(lam_sets[:,1].min()),np.log10(lam_sets[:,1].max()),50)
+#            zgrid = griddata(lam_sets[:,0],lam_sets[:,1],lam_error_scale*lam_mask,xgrid,ygrid,interp='linear')
+#            plt.figure();
+#            #plt.contourf(xgrid,ygrid,zgrid,np.logspace(-5,-1,40));
+#            plt.contourf(xgrid,ygrid,zgrid,15);
+#            #plt.clim([0,0.1])
+#            plt.scatter(lam_sets[:,0],lam_sets[:,1],c=lam_error_scale,lw=1,edgecolor='w')
+#            #plt.clim([0,0.1])
+#            plt.plot(lam_sets[isol,0],lam_sets[isol,1],'wx')
+#            plt.xlabel(r'$\lambda_{n}$')
+#            plt.ylabel(r'$\lambda_{\phi}$')
+#            plt.xscale('log')
+#            plt.yscale('log')
+#            #plt.clim([0,0.1])
+#            if save_results and lam_sets.shape[0] > 1:
+#                plt.savefig(save_path+save_file+'_compare_regularizer_contour.png',dpi=300)
+#        
+#        plt.figure()
+#        plt.plot(errRecord[isol])
+#        plt.xlabel('Iterations')
+#        plt.ylabel('Log-likelihood')
+#        plt.grid(b=True)
+#        if save_results:
+#            plt.savefig(save_path+save_file+'_LogLikelihood.png',dpi=300)
+#        
+#        
+#        plt.figure()
+#        plt.semilogy(stepRecord[isol][1:])
+#        plt.xlabel('Iterations')
+#        plt.ylabel('Step Evaluation')
+#        plt.grid(b=True)
+#        if save_results:
+#            plt.savefig(save_path+save_file+'_StepEvaluation.png',dpi=300)
+#    
+#    prof_sol = mle.Build_WVDIAL_sparsa_Profiles(sol_List[isol],ConstTerms,dt=rate_adj,return_params=True,scale=scale)
+#    
+#    if plot_results:
+#        tind = np.int(np.round(np.random.rand()*sol['xN'].shape[0]))
+#        subnum = 210
+#        plt.figure()
+#        for ifig,var in enumerate(fit_profs.keys()):
+#            plt.subplot(subnum+1+ifig)
+#            plt.semilogy(fit_profs[var].profile[tind,:])
+#            plt.semilogy(verify_profs[var].profile[tind,:])
+#            plt.semilogy(prof_x0[var][tind,:])
+#            plt.semilogy(prof_sol[var][tind,:])  
+#        if save_results:
+#            plt.savefig(save_path+save_file+'Fitprofs_1D.png',dpi=300)
+#        
+#        
+#        plt.figure()
+#        plt.subplot(211)
+#        plt.plot(profs['Absolute_Humidity'].profile[tind,:]*lp.N_A/lp.mH2O)
+#        plt.plot(prof_x0['nWV'][tind,:])
+#        plt.plot(prof_sol['nWV'][tind,:])
+#        plt.ylim([0,20*lp.N_A/lp.mH2O])
+#        plt.title('$n_{wv}$')
+#        plt.subplot(212)
+#        plt.semilogy(phi0[tind,:])
+#        plt.semilogy(prof_x0['phi'][tind,:])
+#        plt.semilogy(prof_sol['phi'][tind,:])
+#        plt.title('$\phi$')
+#        if save_results:
+#            plt.savefig(save_path+save_file+'Abs_Humid_Denoise_1D.png',dpi=300)
+#    
+#    
+#    
+#    denoise_labels = ['Absolute_Humidity','Attenuated_Backscatter']
+#    denoise_profs = {}
+#    
+#    var = denoise_labels[0]
+#    var1 = 'Offline'
+#    
+#    denoise_profs[var] = profs[var1].copy()
+#    denoise_profs[var].label = 'Denoised '+profs[var].label
+#    denoise_profs[var].descript = 'PTV Denoised ' + profs[var].descript
+#    denoise_profs[var].profile = prof_sol['nWV']*lp.mH2O/lp.N_A
+#    denoise_profs[var].range_array = raw_profs['Offline'].range_array
+#    denoise_profs[var].profile_type = profs[var].profile_type
+#    denoise_profs[var].profile_variance = np.ones(denoise_profs[var].profile.shape)
+#    denoise_profs[var].ProcessingStatus = []
+#    denoise_profs[var].cat_ProcessingStatus('PTV denoised')
+#    
+#    var = denoise_labels[1]
+#    var1 = 'Offline'
+#    denoise_profs[var] = profs[var1].copy()
+#    denoise_profs[var].label = 'Denoised '+ str(var).replace('_',' ')
+#    denoise_profs[var].descript = 'PTV Denoised Common terms between online and offline channels'
+#    denoise_profs[var].profile = prof_sol['phi']
+#    #denoise_profs[var].range_array = raw_profs[var1].range_array
+#    denoise_profs[var].profile_variance = np.ones(denoise_profs[var].profile.shape)
+#    denoise_profs[var].ProcessingStatus = []
+#    denoise_profs[var].cat_ProcessingStatus('PTV denoised')
+#    
+#    
+#      
+#    
+#    if plot_results:          
+#        for plt_var in denoise_profs.keys():
+#            lplt.pcolor_profiles([denoise_profs[plt_var]],cmap=[plot_settings[plt_var]['colormap']],scale=[plot_settings[plt_var]['scale']],
+#                                 climits=[plot_settings[plt_var]['climits']],plot_date=True)
+#            if save_results:
+#                plt.savefig(save_path+save_file+'_'+str(plt_var)+'_Denoise_'+plot_settings[plt_var]['colormap']+'.png',dpi=600)
+#           
+#        prof_vars = ['Offline','Aerosol_Backscatter_Coefficient','Absolute_Humidity']     
+#        for plt_var in prof_vars:
+#            if plt_var in profs:
+#                lplt.pcolor_profiles([profs[plt_var]],cmap=[plot_settings[plt_var]['colormap']],scale=[plot_settings[plt_var]['scale']],
+#                                     climits=[plot_settings[plt_var]['climits']],plot_date=True)
+#                if save_results:
+#                    plt.savefig(save_path+save_file+'_'+str(plt_var)+'_'+plot_settings[plt_var]['colormap']+'.png',dpi=600)
+#    
+#    
+#    if save_results:
+#        for var in denoise_profs.keys():
+#            denoise_profs[var].write2nc(save_path+save_file+'.nc')
+#        for var in profs.keys():
+#            profs[var].write2nc(save_path+save_file+'.nc')
+#        for var in fit_profs.keys():
+#            fit_profs[var].write2nc(save_path+save_file+'.nc')
+#        for var in verify_profs.keys():
+#            verify_profs[var].write2nc(save_path+save_file+'.nc')
+#        lp.write_var2nc(lam_sets,'regularizer',save_path+save_file+'.nc')
+#        lp.write_var2nc(step_eps,'step_eps',save_path+save_file+'.nc')
+#        lp.write_var2nc(max_iter,'max_iter',save_path+save_file+'.nc')
+#    

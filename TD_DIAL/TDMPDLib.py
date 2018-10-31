@@ -63,7 +63,7 @@ def Build_TD_sparsa_Profiles(x,Const,return_params=False,params={},n_conv=0,scal
     except KeyError:    
         BSR = np.exp(x['xB']*scale['xB'])+1 # backscatter ratio
         nWV = np.exp(x['xN']*scale['xN'])   # water vapor number density
-        T = np.cumsum(x['xT'],axis=1)*scale['xT']  # temperature
+        T = np.cumsum(x['xT'],axis=1)*scale['xT']+Const['base_T'][:,np.newaxis]  # temperature
         
         phi = np.exp(scale['xPhi']*x['xPhi']) # common terms at 770 nm
         psi = np.exp(scale['xPsi']*x['xPsi']) # common terms at 828 nm
@@ -85,7 +85,7 @@ def Build_TD_sparsa_Profiles(x,Const,return_params=False,params={},n_conv=0,scal
         beta = beta.reshape((Const['molPCA']['O2']['nu_pca'].size,BSR.shape[0],BSR.shape[1]))
         beta = beta.transpose((1,2,0))
         
-        nO2 = Const['base_P'][:,np.newaxis]*T**4.2199/(kB*Const['base_T'][:,np.newaxis]**5.2199)-nWV 
+        nO2 = Const['base_P'][:,np.newaxis]*T**(Cg-1)/(kB*Const['base_T'][:,np.newaxis]**Cg)-nWV 
     
     dR = Const['dR']
     i0 = Const['i0']  # index into transmission frequency
@@ -182,11 +182,12 @@ def TD_sparsa_Error(x,fit_profs,Const,lam,weights=np.array([1]),scale={'xB':1,'x
         elif 'CombOffline' in var:
             DT_index = 5
         
+#        if var == 'MolOnline':  # validation testing - separate channels
         if not np.isnan(x['xDT'][DT_index]):
             corrected_fit_profs = mle.deadtime_correct(fit_profs[var].profile,np.exp(x['xDT'][DT_index]),dt=Const[var]['rate_adj'])
-            ErrRet = ErrRet + np.nansum(weights*(forward_profs[var]-corrected_fit_profs*np.log(forward_profs[var])))
+            ErrRet += np.nansum(weights*(forward_profs[var]-corrected_fit_profs*np.log(forward_profs[var])))
         else:
-            ErrRet = ErrRet + np.nansum(weights*(forward_profs[var]-fit_profs[var].profile*np.log(forward_profs[var])))
+            ErrRet += np.nansum(weights*(forward_profs[var]-fit_profs[var].profile*np.log(forward_profs[var])))
         
     return ErrRet
 
@@ -287,7 +288,7 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,weights=np.array([1]),n_conv=
         
         gradErr['xG'][ichan] = np.nansum(e0[var]*sig_profs[var]) 
             
-        
+        #  and var == 'MolOnline' # validation testing - separate channels
         if 'xT' in gradErr.keys():
             if not 'WV' in var and 'Online' in var:
                 sig = abs_spec['O2on']['sig']
@@ -303,13 +304,31 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,weights=np.array([1]),n_conv=
                 # temperature gradient for optical depth
 #                grad_o = scale['xT']*np.cumsum(np.cumsum((dR*spec.fo2*dsigdT*(forward_profs['nO2']-forward_profs['nWV'])[:,:,np.newaxis] \
 #                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis,np.newaxis]/(kB*Const['base_T'][:,np.newaxis,np.newaxis]**Cg)*forward_profs['T'][:,:,np.newaxis])[:,::-1,:],axis=1),axis=1)[:,::-1,:]
-                grad_o = scale['xT']*(dR*spec.fo2*dsigdT*(forward_profs['nO2']-forward_profs['nWV'])[:,:,np.newaxis] \
-                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis,np.newaxis]/(kB*Const['base_T'][:,np.newaxis,np.newaxis]**Cg)*forward_profs['T'][:,:,np.newaxis])
+                grad_o = scale['xT']*dR*spec.fo2*(dsigdT*forward_profs['nO2'][:,:,np.newaxis] \
+                            +sig*(Cg-1)*Const['base_P'][:,np.newaxis,np.newaxis]/(kB*Const['base_T'][:,np.newaxis,np.newaxis]**Cg)*(forward_profs['T']**(Cg-2))[:,:,np.newaxis])
                 
 #                Tatm0 = np.exp(-dR*spec.fo2*np.cumsum(sig[:,:,i0]*forward_profs['nO2'],axis=1))
 #                Tatm = np.exp(-dR*spec.fo2*np.cumsum(sig*forward_profs['nO2'],axis=1))
                 
                 # compute each summed term separately
+                c = -e0[var]*sig_profs[var]
+                a = grad_o[:,:,i0]
+                gradErr['xT']+= np.cumsum(a[:,::-1]*np.cumsum(c[:,::-1],axis=1),axis=1)[:,::-1]
+                
+                c = -e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*Tatm0**2*Const[var]['Trx'][i0]*(forward_profs['BSR']-1)
+                a = grad_o[:,:,i0]
+                gradErr['xT']+= np.cumsum(a[:,::-1]*np.cumsum(c[:,::-1],axis=1),axis=1)[:,::-1]
+                
+                c1 = -e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*Tatm0
+                c2 = Const[var]['Trx'][np.newaxis,np.newaxis,:]*beta*Tatm
+                a = grad_o
+                gradErr['xT']+= np.cumsum(np.nansum(a[:,::-1,:]*np.cumsum(c2[:,::-1,:]*c1[:,::-1,np.newaxis],axis=1),axis=2),axis=1)[:,::-1]
+                
+                c1 = e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*Tatm0
+                c2 = Const[var]['Trx'][np.newaxis,np.newaxis,:]*dbetadT*Tatm
+                gradErr['xT']+=scale['xT']*np.cumsum((c1*np.nansum(c2,axis=2))[:,::-1],axis=1)[:,::-1]
+                
+                """
                 c = -e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*Tatm0 \
                     *2*Const[var]['Trx'][i0]*Tatm0*(forward_profs['BSR']-1)
                 a = grad_o[:,:,i0]
@@ -327,7 +346,7 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,weights=np.array([1]),n_conv=
                 
                 gradErr['xT']+=scale['xT']*np.cumsum((e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*Tatm0 \
                     *np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*Tatm*dbetadT,axis=2))[:,::-1],axis=1)[:,::-1]
-                    
+                """    
                     
                 
 #                gradErr['xT']+= -e0[var]*Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0 \
@@ -343,13 +362,13 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,weights=np.array([1]),n_conv=
 #                sig,dsigdT = spec.calc_pca_T_spectrum_w_deriv(Const['absPCA']['O2off'],forward_profs['T'],Const['base_T'],Const['base_P']) # oxygen absorption cross section
 #                sig = sig.reshape(forward_profs['T'].shape)
 #                dsigdT = dsigdT.reshape(forward_profs['T'].shape)
-                grad_o = scale['xT']*(dR*spec.fo2*dsigdT*(forward_profs['nO2']-forward_profs['nWV']) \
-                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis]/(kB*Const['base_T'][:,np.newaxis]**Cg)*forward_profs['T'])
+                grad_o = scale['xT']*dR*spec.fo2*(dsigdT*forward_profs['nO2'] \
+                            +sig*(Cg-1)*Const['base_P'][:,np.newaxis]/(kB*Const['base_T'][:,np.newaxis]**Cg)*forward_profs['T']**(Cg-2))
                 
 #                Tatm0 = np.exp(-dR*spec.fo2*np.cumsum(sig*forward_profs['nO2'],axis=1))
                 
                 gradErr['xT']+= np.cumsum(grad_o[:,::-1]*np.cumsum((-2*e0[var]*sig_profs[var])[:,::-1],axis=1),axis=1)[:,::-1]
-                gradErr['xT']+= np.cumsum((e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*Tatm0**2*np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*dbetadT,axis=2))[:,::-1],axis=1)[:,::-1]
+                gradErr['xT']+= scale['xT']*np.cumsum((e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*Tatm0**2*np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*dbetadT,axis=2))[:,::-1],axis=1)[:,::-1]
                 
 #                gradErr['xT']+=e0[var]*(sig_profs[var]*(-2*grad_o) \
 #                        +Gain*Const[var]['mult']*forward_profs['Phi']*Tatm0**2*np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*dbetadT,axis=2))
@@ -362,11 +381,19 @@ def TD_sparsa_Error_Gradient(x,fit_profs,Const,lam,weights=np.array([1]),n_conv=
 #                sig,dsigdT = spec.calc_pca_T_spectrum_w_deriv(Const['absPCA']['O2off'],forward_profs['T'],Const['base_T'],Const['base_P']) # oxygen absorption cross section
 #                sig = sig.reshape(forward_profs['T'].shape)
 #                dsigdT = dsigdT.reshape(forward_profs['T'].shape)
-                grad_o = scale['xT']*(dR*spec.fo2*dsigdT*(forward_profs['nO2']-forward_profs['nWV']) \
-                            +spec.fo2*sig*(Cg-1)*Const['base_P'][:,np.newaxis]/(kB*Const['base_T'][:,np.newaxis]**Cg)*forward_profs['T'])
+                grad_o = scale['xT']*dR*spec.fo2*(dsigdT*forward_profs['nO2'] \
+                            +sig*(Cg-1)*Const['base_P'][:,np.newaxis]/(kB*Const['base_T'][:,np.newaxis]**Cg)*forward_profs['T']**(Cg-2))
                 
 #                Tatm0 = np.exp(-dR*spec.fo2*np.cumsum(sig*forward_profs['nO2'],axis=1))
-                gradErr['xT']+= np.cumsum(grad_o[:,::-1]*np.cumsum((-2*e0[var]*sig_profs[var])[:,::-1],axis=1),axis=1)[:,::-1]
+#                gradErr['xT']+= np.cumsum(grad_o[:,::-1]*np.cumsum((-2*e0[var]*sig_profs[var])[:,::-1],axis=1),axis=1)[:,::-1]
+                
+                c = -2*e0[var]*sig_profs[var]
+                a = grad_o
+                gradErr['xT']+= np.cumsum(a[:,::-1]*np.cumsum(c[:,::-1],axis=1),axis=1)[:,::-1]
+                
+                gradErr['xT']+= scale['xT']*np.cumsum((e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*Tatm0**2*np.nansum(Const[var]['Trx'][np.newaxis,np.newaxis,:]*dbetadT,axis=2))[:,::-1],axis=1)[:,::-1]
+#                c = -e0[var]*Gain*Const[var]['mult']*forward_profs['phi']*Tatm0**2
+                
                 
             elif 'WV' in var:
                 if 'Online' in var:
