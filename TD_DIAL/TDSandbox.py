@@ -41,15 +41,15 @@ t_increment = 60*60  # time increment after each denoising step
 
 r_lim = [0.5e3,4e3]
 step_eps = 1e-7 #1e-7 #2e-5
-max_iter = 1000 #1500
+max_iter = 5000 #1500
 deconv = False
 #lam_set = {}
-lam_set = {'xB':130.0,'xN':149.8,'xT':150.0,'xPhi':64.0,'xPsi':64.0}
+lam_set = {'xB':30.0,'xN':49.8,'xT':150.0,'xPhi':64.0,'xPsi':64.0}
 #lam_set = {'xB':1e-9,'xN':1e-9,'xT':1e-9,'xPhi':1e-9,'xPsi':1e-9}
 #lam_set = {'xB':0,'xN':0,'xT':0,'xPhi':0,'xPsi':0} # for validating gradient function
 lam_range0 = {'xB':[0,2],'xN':[1.0,2.0],'xT':[2.0,3.0],'xPhi':[1.0,2.0],'xPsi':[1.0,2.0]}  # note these search bounds are log10
 #Num_reg_iter = 1
-verbose = True
+verbose = False
 plot_results = False
 show_plots = True
 opt_setting = {'Num_reg_first':10,  # number of times to evaluate the regularizer during the first profile
@@ -95,9 +95,11 @@ opt_bounds = {'xG':[0,200],
               'xDT':[0,100e-9],
               'xB':[1,1e5],
               'xN':[0,1e25],
-              'xT':[0,500],
+              'xT':[-50,50],
               'xPhi':[1e-6,1e3],
               'xPsi':[1e-6,1e3]}
+
+plot_defs = {'T':'linear','BSR':'log','phi':'log','psi':'log','nWV':'linear'}
 
 #prof_list = ['Aerosol_Backscatter_Coefficient','Aerosol_Extinction_Coefficient','Merged_Combined_Channel',
 #             'Particle_Depolarization','Volume_Depolarization','Denoised_Aerosol_Backscatter_Coefficient'] #,'Denoised_Aerosol_Backscatter_Coefficient'] #'Aerosol_Extinction_Coefficient'
@@ -644,11 +646,14 @@ for var in raw_profs.keys():
 deriv_var = ['T','BSR','nWV','phi','psi']
 for gvar in deriv_var:
     plt.figure()
-    plt.semilogy(initial_profs[gvar][3,:],label='Model')
-    plt.semilogy(sol_profs[gvar][3,:],label='Final Model')
+    if plot_defs[gvar] == 'log':
+        plt.semilogy(initial_profs[gvar][3,:],label='Model')
+        plt.semilogy(sol_profs[gvar][3,:],label='Final Model')
+    else:
+        plt.plot(initial_profs[gvar][3,:],label='Model')
+        plt.plot(sol_profs[gvar][3,:],label='Final Model')
     plt.title(gvar)
     plt.legend()
-
 
 plt.show()
 
