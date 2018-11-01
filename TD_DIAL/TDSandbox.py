@@ -39,11 +39,13 @@ t_stop = 5*3600+0*60  # stop time in seconds
 t_duration = 60*60  # duration of a single denoising step
 t_increment = 60*60  # time increment after each denoising step
 
-r_lim = [0.3e3,4e3]
+r_lim = [0.5e3,4e3]
 step_eps = 1e-7 #1e-7 #2e-5
 max_iter = 1000 #1500
-deconv = True
-lam_set = {'xB':30.0,'xN':49.8,'xT':150.0,'xPhi':64.0,'xPsi':64.0}
+deconv = False
+#lam_set = {}
+lam_set = {'xB':130.0,'xN':149.8,'xT':150.0,'xPhi':64.0,'xPsi':64.0}
+#lam_set = {'xB':1e-9,'xN':1e-9,'xT':1e-9,'xPhi':1e-9,'xPsi':1e-9}
 #lam_set = {'xB':0,'xN':0,'xT':0,'xPhi':0,'xPsi':0} # for validating gradient function
 lam_range0 = {'xB':[0,2],'xN':[1.0,2.0],'xT':[2.0,3.0],'xPhi':[1.0,2.0],'xPsi':[1.0,2.0]}  # note these search bounds are log10
 #Num_reg_iter = 1
@@ -56,7 +58,20 @@ opt_setting = {'Num_reg_first':10,  # number of times to evaluate the regularize
                }
 
 
+#var_scale = {'xB':1/30e3,'xN':1/5e3,'xT':1/12e3,'xPhi':1/80e3,'xPsi':1/30e3}
 var_scale = {'xB':1,'xN':1,'xT':1,'xPhi':1,'xPsi':1}
+
+# set the optimization variable scale interval.
+# the derived variable space is then transformed
+# to fit on this interval.  
+# Often it is set to [0,1]
+scale = {'xG':[0.0,1.0,'linear'],
+         'xDT':[0.0,1.0,'linear'],
+         'xB':[0.0,1.0,'exp'],
+         'xN':[0.0,1.0,'linear'],
+         'xT':[0.0,1.0,'linear'],
+         'xPhi':[0.0,1.0,'exp'],
+         'xPsi':[0.0,1.0,'exp'],}
 
 # if desired, loaded files will be constrainted by time
 time_start = datetime.datetime(year=1900,month=1,day=1)
@@ -69,12 +84,20 @@ save_results = False
 # set the variable bounds in their native space.
 # this is converted to the state variable later
 # This variable is not actually used
-opt_bounds = {'xG':[-1e10,1e10],
-              'xB':[-1e30,1e10],
-              'xN':[-1e10,1e10],
+#opt_bounds = {'xG':[-1e10,1e10],
+#              'xB':[-1e30,1e10],
+#              'xN':[-1e10,1e10],
+#              'xT':[0,500],
+#              'xPhi':[-1e10,1e10],
+#              'xPsi':[-1e10,1e10]}
+
+opt_bounds = {'xG':[0,200],
+              'xDT':[0,100e-9],
+              'xB':[1,1e5],
+              'xN':[0,1e25],
               'xT':[0,500],
-              'xPhi':[-1e10,1e10],
-              'xPsi':[-1e10,1e10]}
+              'xPhi':[1e-6,1e3],
+              'xPsi':[1e-6,1e3]}
 
 #prof_list = ['Aerosol_Backscatter_Coefficient','Aerosol_Extinction_Coefficient','Merged_Combined_Channel',
 #             'Particle_Depolarization','Volume_Depolarization','Denoised_Aerosol_Backscatter_Coefficient'] #,'Denoised_Aerosol_Backscatter_Coefficient'] #'Aerosol_Extinction_Coefficient'
@@ -291,7 +314,7 @@ for denoise_step in range(t_start_list.size):
                 # store the result in the profile background (bg) but don't
                 # actually subtract it
                 profs[var].bg = np.nanmean(profs[var].profile[:,-100:],axis=1)
-                profs[var].bg_var = np.nanmean(profs[var].profile[:,-100:],axis=1)
+                profs[var].bg_var = np.nansum(profs[var].profile[:,-100:],axis=1)/np.sum(np.logical_not(np.isnan(profs[var].profile[:,-100:])),axis=1)[:,np.newaxis]**2
                 # now trim the range dimension to match the processed profiles
         #        profs[var].slice_range(range_lims=[profs['Aerosol_Backscatter_Coefficeint'].range_array[0],profs['Aerosol_Backscatter_Coefficeint'].range_array[1]])
             profs[var].slice_range(range_lim=r_lim)
@@ -313,7 +336,9 @@ for denoise_step in range(t_start_list.size):
         if 'line' in var:
             raw_profs[var] = profs[var].copy()
             raw_profs[var].profile = raw_profs[var].profile*raw_profs[var].NumProfList[:,np.newaxis]
+            raw_profs[var].profile_variance = raw_profs[var].profile_variance*raw_profs[var].NumProfList[:,np.newaxis]**2
             raw_profs[var].bg = raw_profs[var].bg*raw_profs[var].NumProfList
+            raw_profs[var].bg_var = raw_profs[var].bg_var*raw_profs[var].NumProfList**2
     LidarNumber = np.int(profs['CombOnline'].lidar[-1])
 
     #%%  Load cals and trim them
@@ -479,28 +504,91 @@ for denoise_step in range(t_start_list.size):
     # end Test code
     """
        
+#    # Channel Order:
+#    # 'WVOnline', 'WVOffline', 'MolOnline', 'MolOffline', 'CombOnline', 'CombOffline'
+#    x0 = {}
+##    x0['xPhi'] = np.log((raw_profs['CombOffline'].profile - raw_profs['CombOffline'].bg[:,np.newaxis])/(ConstTerms['CombOffline']['mult']*np.exp(x0['xG'][5])*profs['Backscatter_Ratio'].profile))
+#    x0['xPhi'] = np.log((raw_profs['MolOffline'].profile - raw_profs['MolOffline'].bg[:,np.newaxis])/(ConstTerms['MolOffline']['mult']))
+#    x0['xPsi'] = np.log((raw_profs['WVOffline'].profile - raw_profs['WVOffline'].bg[:,np.newaxis])/ConstTerms['WVOffline']['mult'])
+#    
+##    # exponent defs
+##    x0['xG'] = np.array([-0.1,0.0001,1.6,1.5,1.6,1.6])
+##    x0['xDT'] = np.array([np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9)])
+##    x0['xN'] = np.log(profs['Absolute_Humidity'].profile*lp.N_A/lp.mH2O)
+##    x0['xT'] = np.concatenate((np.zeros(profs['Surf_T'].profile.shape),np.diff(profs['Temperature'].profile,axis=1)),axis=1)
+##    x0['xB'] = np.log(profs['Backscatter_Ratio'].profile-1)
+#    
+#    #linear defs
+#    x0['xG'] = np.exp(np.array([-0.1,0.0001,1.6,1.5,1.6,1.6]))
+#    x0['xDT'] = np.array([30e-9,30e-9,30e-9,30e-9,30e-9,30e-9])
+#    x0['xN'] = profs['Absolute_Humidity'].profile*lp.N_A/lp.mH2O
+#    x0['xT'] = np.concatenate((np.zeros(profs['Surf_T'].profile.shape),np.diff(profs['Temperature'].profile,axis=1)),axis=1)
+#    x0['xB'] = profs['Backscatter_Ratio'].profile
+#    
+#    
+#    
+#    # fixed condition functions
+#    for var in var_scale.keys():
+#        var_scale[var] = np.abs(np.nanmean(x0[var]))
+#        x0[var] = x0[var]/var_scale[var]
+#        
+#    initial_profs = td.Build_TD_sparsa_Profiles(x0,ConstTerms,return_params=True,scale=var_scale)     # ,scale={'xB':1,'xN':1,'xT':1,'xPhi':1,'xPsi':1}
+#    
+#    ErrorFunc = lambda x: td.TD_sparsa_Error(x,raw_profs,ConstTerms,lam_set,scale=var_scale)
+#    GradErrorFunc = lambda x: td.TD_sparsa_Error_Gradient(x,raw_profs,ConstTerms,lam_set,scale=var_scale)
+#    # end fixed condition functions
+       
+    
     # Channel Order:
     # 'WVOnline', 'WVOffline', 'MolOnline', 'MolOffline', 'CombOnline', 'CombOffline'
     x0 = {}
-    x0['xG'] = np.array([-0.1,0.0001,1.6,1.5,1.6,1.6])
-    x0['xDT'] = np.array([np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9),np.log(30e-9)])
-#    x0['xPhi'] = np.log((raw_profs['CombOffline'].profile - raw_profs['CombOffline'].bg[:,np.newaxis])/(ConstTerms['CombOffline']['mult']*np.exp(x0['xG'][5])*profs['Backscatter_Ratio'].profile))
-    x0['xPhi'] = np.log((raw_profs['MolOffline'].profile - raw_profs['MolOffline'].bg[:,np.newaxis])/(ConstTerms['MolOffline']['mult']))
-    x0['xPsi'] = np.log((raw_profs['WVOffline'].profile - raw_profs['WVOffline'].bg[:,np.newaxis])/ConstTerms['WVOffline']['mult'])
-    x0['xN'] = np.log(profs['Absolute_Humidity'].profile*lp.N_A/lp.mH2O)
+    x0['xG'] = np.exp(np.array([-0.1,0.0001,1.6,1.5,1.6,1.6]))
+    x0['xDT'] = np.array([30e-9,30e-9,30e-9,30e-9,30e-9,30e-9])
+    x0['xN'] = profs['Absolute_Humidity'].profile*lp.N_A/lp.mH2O
     x0['xT'] = np.concatenate((np.zeros(profs['Surf_T'].profile.shape),np.diff(profs['Temperature'].profile,axis=1)),axis=1)
-    x0['xB'] = np.log(profs['Backscatter_Ratio'].profile-1)
+    x0['xB'] = profs['Backscatter_Ratio'].profile
+    x0['xPhi'] = (raw_profs['MolOffline'].profile - raw_profs['MolOffline'].bg[:,np.newaxis])/ConstTerms['MolOffline']['mult']
+    x0['xPsi'] = (raw_profs['WVOffline'].profile - raw_profs['WVOffline'].bg[:,np.newaxis])/ConstTerms['WVOffline']['mult']
     
     # set nan values to minimum
     for var in x0.keys():
         if np.sum(np.isnan(x0[var])):
             x0[var][np.isnan(x0[var])] = opt_bounds[var][0]
     
+    condition_functions = {}
+    bnds = {}
+    cond_lims = {}
+    for var in scale.keys():
+        if scale[var][2] == 'exp':
+            cond_lims[var] = {'scale': (np.log(opt_bounds[var][1])-np.log(opt_bounds[var][0]))/(scale[var][1]-scale[var][0]),
+                     'offset':(scale[var][1]-scale[var][0])*np.log(opt_bounds[var][0])/(np.log(opt_bounds[var][1])-np.log(opt_bounds[var][0]))-scale[var][0]}
+            condition_functions[var] = lambda x,y,var=var: mle.cond_exp(x, \
+                               cond_lims[var]['scale'], \
+                               cond_lims[var]['offset'], \
+                               operation=y)
+        elif scale[var][2] == 'linear':
+            cond_lims[var] = {'scale':(opt_bounds[var][1]-opt_bounds[var][0])/(scale[var][1]-scale[var][0]),
+                             'offset':(scale[var][1]-scale[var][0])*opt_bounds[var][0]/(opt_bounds[var][1]-opt_bounds[var][0])-scale[var][0]}
+            condition_functions[var] = lambda x,y,var=var: mle.cond_linear(x, \
+                               cond_lims[var]['scale'], \
+                               cond_lims[var]['offset'], \
+                               operation=y)
+        else:
+            # default to pass
+            condition_functions[var] = lambda x,y: mle.cond_pass(x,operation=y)
+            
+        x0[var] = condition_functions[var](x0[var],'inverse')
+        bnds[var] = sorted([condition_functions[var](opt_bounds[var][0],'inverse'),condition_functions[var](opt_bounds[var][1],'inverse')])
+        x0[var][x0[var] < bnds[var][0]] = bnds[var][0]
+        x0[var][x0[var] > bnds[var][1]] = bnds[var][1]
     
-    initial_profs = td.Build_TD_sparsa_Profiles(x0,ConstTerms,return_params=True,scale=var_scale)     # ,scale={'xB':1,'xN':1,'xT':1,'xPhi':1,'xPsi':1}
     
-    ErrorFunc = lambda x: td.TD_sparsa_Error(x,raw_profs,ConstTerms,lam_set,scale=var_scale)
-    GradErrorFunc = lambda x: td.TD_sparsa_Error_Gradient(x,raw_profs,ConstTerms,lam_set,scale=var_scale)
+    initial_profs = td.Build_TD_sparsa_Profiles(x0,ConstTerms,return_params=True,cond_fun=condition_functions)     # ,scale={'xB':1,'xN':1,'xT':1,'xPhi':1,'xPsi':1}
+    
+    ErrorFunc = lambda x: td.TD_sparsa_Error(x,raw_profs,ConstTerms,lam_set,cond_fun=condition_functions)
+    GradErrorFunc = lambda x: td.TD_sparsa_Error_Gradient(x,raw_profs,ConstTerms,lam_set,cond_fun=condition_functions)
+    
+    
     
     
     
@@ -524,20 +612,45 @@ for denoise_step in range(t_start_list.size):
     for gvar in gradNum.keys():
         plt.figure()
         plt.title(gvar)
-        plt.plot(gradNum[gvar].flatten(),label='Numeric')
-        plt.plot(gradDirect[gvar].flatten(),'--',label='Direct')
+        plt.plot(gradNum[gvar].flatten(),'.-',label='Numeric')
+        plt.plot(gradDirect[gvar].flatten(),'x--',label='Direct')
         plt.legend()
     """
     
-    sol,[error_hist,step_hist]= mle.GVHSRL_sparsa_optimizor(ErrorFunc,GradErrorFunc,x0,lam_set,sub_eps=1e-5,step_eps=step_eps,opt_cnt_min=10,opt_cnt_max=max_iter,cnt_alpha_max=10,sigma=1e-5,verbose=False,alpha = 1e15)
-    sol_profs = td.Build_TD_sparsa_Profiles(sol,ConstTerms,return_params=True,scale=var_scale)
+    
+    
+    sol,[error_hist,step_hist]= mle.GVHSRL_sparsa_optimizor(ErrorFunc,GradErrorFunc,x0,lam_set,sub_eps=1e-5,step_eps=step_eps,opt_cnt_min=10,opt_cnt_max=max_iter,cnt_alpha_max=10,sigma=1e-5,verbose=verbose,alpha = 1e15)
+    sol_profs = td.Build_TD_sparsa_Profiles(sol,ConstTerms,return_params=True,cond_fun=condition_functions)
+#    sol_profs = td.Build_TD_sparsa_Profiles(sol,ConstTerms,return_params=True,scale=var_scale)
 
 plt.figure()
 plt.plot(error_hist)
+plt.ylabel('inverse log-likelihood')
 
 plt.figure()
 plt.plot(step_hist)
+plt.ylabel('step size')
 
+
+
+for var in raw_profs.keys():
+    plt.figure();
+    plt.semilogy(raw_profs[var].profile[3,:],label='Data'); 
+    plt.semilogy(initial_profs[var][3,:],label='Model')
+    plt.semilogy(sol_profs[var][3,:],label='Final Model')
+    plt.title(var)
+
+
+deriv_var = ['T','BSR','nWV','phi','psi']
+for gvar in deriv_var:
+    plt.figure()
+    plt.semilogy(initial_profs[gvar][3,:],label='Model')
+    plt.semilogy(sol_profs[gvar][3,:],label='Final Model')
+    plt.title(gvar)
+    plt.legend()
+
+
+plt.show()
 
 #
 #        if not verify:
